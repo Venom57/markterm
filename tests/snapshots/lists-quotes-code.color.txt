@@ -1,0 +1,25 @@
+␛[2m  ╭─ rust ␛[0m
+␛[2m  │ ␛[0mfn main() {
+␛[2m  │ ␛[0m    let x = 1;
+␛[2m  │ ␛[0m}
+␛[2m  ╰───␛[0m
+
+  ␛[36m• ␛[0mtight parent
+    ␛[36m◦ ␛[0mchild one
+    ␛[36m◦ ␛[0mchild two
+  ␛[36m• ␛[0mnext
+
+  ␛[36m1. ␛[0mloose one
+
+  ␛[36m2. ␛[0mloose two
+
+  ␛[2m│ ␛[0mouter
+  ␛[2m│␛[0m
+  ␛[2m│ ␛[0msecond para
+  ␛[2m│␛[0m
+  ␛[2m│ │ ␛[0minner nested
+  ␛[2m│␛[0m
+  ␛[2m│ ␛[0mback to outer
+
+  ␛[2m│ ␛[0m  ␛[36m• ␛[0mlist in quote
+  ␛[2m│ ␛[0m  ␛[36m• ␛[0msecond

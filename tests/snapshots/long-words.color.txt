@@ -1,0 +1,46 @@
+␛[1;4;97mAveryveryverylongheadingword␛[0m
+␛[1;4;97mwithoutanyspaces␛[0m
+
+Visit
+https://example.com/a/very/l
+ong/path/that/never/ends/at/
+all/ok please.
+
+  ␛[36m• ␛[0mItem
+    https://example.com/anot
+    her/long/url/inside/a/li
+    st/item/here done
+    ␛[36m◦ ␛[0mNested
+      Supercalifragilisticex
+      pialidocious_extra_lon
+      g_identifier
+
+  ␛[2m│ ␛[0mQuote
+  ␛[2m│ ␛[0mhttps://example.com/quot
+  ␛[2m│ ␛[0med/long/url/that/must/br
+  ␛[2m│ ␛[0meak/inside/the/border
+
+See ␛[4mthe docs␛[0m
+␛[2m(https://example.com/docs/wi␛[0m
+␛[2mth/a/long/path/that/wraps/to␛[0m
+␛[2mo)␛[0m now.
+
+Inline
+␛[48;5;236m some_really_long_inline_cod␛[0m
+␛[48;5;236me_span_without_spaces ␛[0m code.
+
+Short ␛[48;5;236m a b  c ␛[0m code then
+text that continues after
+the code span ok.
+
+  ␛[2m┌──────┬─────────────────┐␛[0m
+  ␛[2m│␛[0m ␛[1mCol␛[0m  ␛[2m│␛[0m ␛[1mLink␛[0m            ␛[2m│␛[0m
+  ␛[2m├──────┼─────────────────┤␛[0m
+  ␛[2m│␛[0m a    ␛[2m│␛[0m https://example ␛[2m│␛[0m
+  ␛[2m│␛[0m      ␛[2m│␛[0m .com/averyveryv ␛[2m│␛[0m
+  ␛[2m│␛[0m      ␛[2m│␛[0m erylongurlwitho ␛[2m│␛[0m
+  ␛[2m│␛[0m      ␛[2m│␛[0m utspaces/abc    ␛[2m│␛[0m
+  ␛[2m│␛[0m ␛[1mbold␛[0m ␛[2m│␛[0m ␛[48;5;236m inline_code_th␛[0m ␛[2m│␛[0m
+  ␛[2m│␛[0m      ␛[2m│␛[0m ␛[48;5;236mat_is_too_long_␛[0m ␛[2m│␛[0m
+  ␛[2m│␛[0m      ␛[2m│␛[0m ␛[48;5;236mfor_the_cell ␛[0m   ␛[2m│␛[0m
+  ␛[2m└──────┴─────────────────┘␛[0m

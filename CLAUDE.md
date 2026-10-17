@@ -152,34 +152,34 @@ cargo clippy -- -D warnings  # Lint with warnings as errors
 ## Milestones
 
 ### M1: Foundation
-- [ ] Project scaffolding (Cargo.toml, module structure)
-- [ ] CLI argument parsing with clap
-- [ ] Basic markdown parsing with pulldown-cmark
-- [ ] Terminal dimension detection
+- [x] Project scaffolding (Cargo.toml, module structure)
+- [x] CLI argument parsing with clap
+- [x] Basic markdown parsing with pulldown-cmark
+- [x] Terminal dimension detection
 
 ### M2: Core Rendering
-- [ ] Headings, bold, italic, code (inline + block)
-- [ ] Lists (ordered, unordered, nested)
-- [ ] Block quotes
-- [ ] Horizontal rules
-- [ ] Word wrapping
+- [x] Headings, bold, italic, code (inline + block)
+- [x] Lists (ordered, unordered, nested)
+- [x] Block quotes
+- [x] Horizontal rules
+- [x] Word wrapping
 
 ### M3: Pager
-- [ ] Raw mode terminal control
-- [ ] Page-at-a-time display with spacebar
-- [ ] Status line
-- [ ] Navigation (up/down/page up/page down/home/end)
-- [ ] Clean exit on q/Esc and signal handling
+- [x] Raw mode terminal control
+- [x] Page-at-a-time display with spacebar
+- [x] Status line
+- [x] Navigation (up/down/page up/page down/home/end)
+- [x] Clean exit on q/Esc and signal handling
 
 ### M4: Polish
-- [ ] Links and link display
-- [ ] Tables with box-drawing
-- [ ] Task lists
-- [ ] Pipe detection and NO_COLOR support
-- [ ] Stdin input
-- [ ] Theme support (dark/light/none)
+- [x] Links and link display
+- [x] Tables with box-drawing
+- [x] Task lists
+- [x] Pipe detection and NO_COLOR support
+- [x] Stdin input
+- [x] Theme support (dark/light/none)
 
 ### M5: Stretch
-- [ ] Search (/ and n)
+- [x] Search (/ and n)
 - [ ] Syntax highlighting in code blocks (tree-sitter or syntect)
 - [ ] Config file (~/.config/markterm/config.toml)

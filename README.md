@@ -5,11 +5,12 @@ A lightweight command-line tool that renders markdown files with VT100/ANSI term
 ## Features
 
 - **Markdown rendering** — headings, bold, italic, strikethrough, inline code, code blocks, lists, tables, block quotes, links, horizontal rules, task lists
-- **Built-in pager** — page through documents with spacebar, scroll line-by-line, jump to top/bottom
+- **Built-in pager** — page through documents with spacebar, scroll line-by-line, jump to top/bottom, search with `/`, built-in help with `?`
+- **Resize aware** — re-wraps the document when the terminal is resized; uses the alternate screen so your shell output is left untouched
 - **Word wrapping** — respects terminal width with proper line breaking
 - **No-wrap mode** — truncate long lines with ellipsis instead of wrapping
 - **Single binary** — no runtime dependencies, compiles to a standalone executable
-- **Pipe-friendly** — auto-detects TTY; dumps plain output when piped
+- **Pipe-friendly** — auto-detects TTY; dumps plain, colour-free output when piped (override with `--color always`); honours [`NO_COLOR`](https://no-color.org)
 
 ## Installation
 
@@ -47,19 +48,56 @@ Then restart your terminal or run `source ~/.zshrc`.
 ## Usage
 
 ```
-markterm [OPTIONS] <FILE>
+markterm [OPTIONS] [FILE]
 
 Arguments:
-  <FILE>    Markdown file to display (use - for stdin)
+  [FILE]    Markdown file to display (use - for stdin; defaults to stdin when it is piped)
 
 Options:
-  -w, --width <COLS>     Override terminal width
+  -w, --width <COLS>     Override terminal width (disables re-wrapping on resize)
   -t, --theme <THEME>    Color theme: auto, dark, light, none (default: auto)
+      --color <WHEN>     When to use colour: auto, always, never (default: auto)
       --no-pager         Dump rendered output to stdout without paging
       --no-wrap          Truncate long lines with ellipsis instead of wrapping
   -h, --help             Show help
   -V, --version          Show version
 ```
+
+### Colour
+
+Colour and text attributes are emitted only when all of these hold:
+
+- `--theme` is not `none`,
+- the `NO_COLOR` environment variable is unset or empty, and
+- `--color always` is given, or `--color auto` (the default) and stdout is a terminal.
+
+So `markterm doc.md > out.txt` produces plain text, while
+`markterm --color always doc.md | less -R` keeps the formatting.
+
+### Themes
+
+| Theme | Description |
+|-------|-------------|
+| `auto` | Picks `dark` or `light` from the terminal background (`COLORFGBG`, then an OSC 11 query); falls back to `dark` when it can't tell or when output is piped |
+| `dark` | Bright white underlined H1, bright cyan H2, bright yellow H3, dark-grey inline-code background, cyan list markers |
+| `light` | For white backgrounds: underlined H1 in the default colour, blue H2, magenta H3, light-grey inline-code background, blue list markers (no bright white or yellow) |
+| `none` | No colours or text attributes (same as `--color never`) |
+
+Without colour (`--theme none`, `--color never`, `NO_COLOR`, or piped output)
+the document keeps its structure in plain text: H1 headings are underlined
+with `═` and H2 headings with `─` (as wide as the heading), inline code keeps
+its backticks, and quotes, code blocks and tables use the same `│`/box-drawing
+borders as in colour. Bold and italic text is shown as plain text.
+
+Italic text is shown underlined on terminals known not to support italics
+(`TERM` of `linux`, `vt100`, `vt220` and other `vt*`, `dumb`, `ansi`, `cons25`).
+
+Wrapping and table layout measure display width, so CJK text (two columns per
+character), emoji and combining marks line up; CJK text may break between any
+two characters, and words or URLs longer than a line are broken to fit.
+
+Input that is not valid UTF-8 is displayed with replacement characters (`�`)
+rather than rejected.
 
 ### Examples
 
@@ -67,11 +105,15 @@ Options:
 # View a markdown file with paging
 markterm README.md
 
-# Pipe from stdin
+# Pipe from stdin (the - is optional when stdin is piped)
+cat README.md | markterm
 cat README.md | markterm -
 
 # Dump without pager (useful for piping)
 markterm --no-pager README.md
+
+# Keep colours when piping into another pager
+markterm --color always README.md | less -R
 
 # Override terminal width
 markterm -w 60 README.md
@@ -80,19 +122,50 @@ markterm -w 60 README.md
 markterm --no-wrap README.md
 ```
 
+If the document fits on one screen it is printed directly, without starting the pager.
+
+### Exit status
+
+| Status | Meaning |
+|--------|---------|
+| `0` | Success (including when the output pipe is closed early, e.g. `\| head`) |
+| `1` | The input could not be read, or a terminal error occurred |
+| `2` | Invalid command-line usage |
+| `130` | Quit with `Ctrl-C` |
+| `128+N` | Terminated by signal N (e.g. `143` for SIGTERM); the terminal is restored first |
+
 ## Pager Controls
 
 | Key | Action |
 |-----|--------|
-| `Space` | Next page |
-| `b` | Previous page |
-| `Enter` / `j` / `Down` | Next line |
-| `k` / `Up` | Previous line |
-| `d` | Half page down |
-| `u` | Half page up |
-| `g` / `Home` | Go to top |
-| `G` / `End` | Go to bottom |
-| `q` / `Esc` | Quit |
+| `Space` / `f` / `z` / `PageDown` / `Ctrl-F` | Next page |
+| `b` / `w` / `PageUp` / `Ctrl-B` | Previous page |
+| `Enter` / `j` / `e` / `Down` / `Ctrl-E` | Next line |
+| `k` / `y` / `Up` / `Ctrl-Y` | Previous line |
+| `d` / `Ctrl-D` | Half page down |
+| `u` / `Ctrl-U` | Half page up |
+| `g` / `<` / `Home` | Go to top (`<n>g`: go to line *n*) |
+| `G` / `>` / `End` | Go to bottom (`<n>G`: go to line *n*) |
+| `<n>%` / `<n>p` | Go to *n* percent through the document |
+| `/pattern` `Enter` | Search forward |
+| `n` / `N` | Next / previous match (wraps around) |
+| `h` / `?` | Show help (any key returns) |
+| `Ctrl-L` / `r` | Redraw the screen |
+| `Ctrl-Z` | Suspend to the shell (resume with `fg`) |
+| `q` / `Q` / `Esc` | Quit |
+| `Ctrl-C` | Quit with exit status 130 |
+
+A number typed before a movement key repeats it, e.g. `10j` scrolls down ten
+lines and `3 ` (3, Space) moves three pages. The mouse wheel scrolls the pager
+in terminals that support alternate-scroll mode.
+
+**Search** is a plain substring match on the displayed text, case-insensitive
+unless the pattern contains an uppercase letter (smart case). Matches are
+highlighted in reverse video. In the search prompt, `Backspace` edits, `Esc`
+cancels, and an empty pattern repeats the previous search.
+
+The status line shows the file name, the visible line range and the position
+through the document, or `(END)` at the bottom.
 
 ## Rendering
 
