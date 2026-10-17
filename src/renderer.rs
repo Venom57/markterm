@@ -744,6 +744,9 @@ fn render_table(state: &mut RenderState) {
 }
 
 #[cfg(test)]
+mod snapshot_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::parser;

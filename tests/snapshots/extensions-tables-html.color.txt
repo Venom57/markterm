@@ -1,0 +1,37 @@
+␛[2m──────────────────────────────────────────────────────────────────────────────␛[0m
+
+␛[1m␛[96mtitle: Front matter␛[0m ␛[1m␛[96mtags: ␛[0m␛[1m␛[96m[␛[0m␛[1m␛[96ma, b␛[0m␛[1m␛[96m]␛[0m
+
+␛[1m␛[4m␛[97mH1 ␛[0m␛[48;5;236mcode ␛[0m␛[1m␛[4m␛[97mTitle␛[0m
+
+␛[1m␛[96mH2␛[0m
+
+␛[1m␛[93mH3␛[0m
+
+␛[2m  ┌──────┬───────────────────────────────────────────────────────────┬───────┐␛[0m
+  ␛[2m│␛[0m ␛[1mLeft␛[0m ␛[2m│␛[0m ␛[1mCenter                                                   ␛[0m ␛[2m│␛[0m ␛[1mRight␛[0m ␛[2m│␛[0m
+␛[2m  ├──────┼───────────────────────────────────────────────────────────┼───────┤␛[0m
+  ␛[2m│␛[0m bold ␛[2m│␛[0m code                                                      ␛[2m│␛[0m link  ␛[2m│␛[0m
+  ␛[2m│␛[0m a    ␛[2m│␛[0m https://example.com/averyveryverylongurlwithoutspaces/abc ␛[2m│␛[0m 1     ␛[2m│␛[0m
+  ␛[2m│␛[0m 漢字漢字 ␛[2m│␛[0m b                                                         ␛[2m│␛[0m 2     ␛[2m│␛[0m
+␛[2m  └──────┴───────────────────────────────────────────────────────────┴───────┘␛[0m
+␛[2m(https://x.io)␛[0m
+
+After table paragraph.
+
+Text with footnote[^1].
+
+[^1]: The footnote body.
+
+Alt text here
+
+Hidden body
+
+Inline Ctrl+C html.
+
+Line one
+line two (hard break)
+
+  ␛[36m• ␛[0m␛[32m␛[1m[✓]␛[0m done item
+  ␛[36m• ␛[0m␛[2m[ ]␛[0m todo item
+

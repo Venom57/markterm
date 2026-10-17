@@ -1,0 +1,28 @@
+  • This is a long list item that
+  should wrap onto a second line to
+  check hanging indent alignment here
+
+bold text that spans many words and
+must wrap across lines to see style
+leakage behaviour
+
+  | bold quote that is long enough to
+  | wrap across multiple lines inside
+  | the blockquote border ok
+
+Visit
+https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all/whatsoever/ok
+now.
+
+See docs
+(https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all)
+and https://auto.link/x
+(https://auto.link/x).
+
+日本語のテキストはとても長いのでこの行は折り返されるべきですが幅の計算が正しくないと端末の幅を超えてしまいます
+日本語 日本語 日本語 日本語
+
+Emoji 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
+🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 end
+
+Use `foo bar` and `x` here.

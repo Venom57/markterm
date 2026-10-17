@@ -1,0 +1,4 @@
+      ␛[36m• ␛[0mitem in nowrap mode
+        ␛[36m◦ ␛[0mnested
+
+␛[2m  │ ␛[0mquote in nowrap
