@@ -1,6 +1,7 @@
 //! A `more`-style pager: displays lines one page at a time with keyboard
 //! navigation. The pure state lives in [`state`]; this module does the I/O.
 
+mod guard;
 mod state;
 mod text;
 
@@ -14,6 +15,7 @@ use crossterm::{
 use std::io::{self, Write};
 
 use crate::style;
+use guard::TerminalGuard;
 use state::{Frame, Outcome, Pager};
 
 /// Run the pager over `lines` and return the process exit status.
@@ -36,9 +38,9 @@ pub fn run(
         };
     }
 
-    let guard = RawMode::enable()?;
-    let result = event_loop(Pager::new(lines, filename, page_height), width);
-    guard.disable()?;
+    let guard = TerminalGuard::enter()?;
+    let result = event_loop(&guard, Pager::new(lines, filename, page_height), width);
+    drop(guard);
     result
 }
 
@@ -66,31 +68,7 @@ fn print_all(lines: &[String]) -> io::Result<()> {
     out.flush()
 }
 
-/// Restores cooked mode when dropped.
-struct RawMode;
-
-impl RawMode {
-    fn enable() -> io::Result<Self> {
-        terminal::enable_raw_mode()?;
-        Ok(RawMode)
-    }
-
-    fn disable(self) -> io::Result<()> {
-        std::mem::forget(self);
-        terminal::disable_raw_mode()?;
-        let mut stdout = io::stdout();
-        queue!(stdout, cursor::MoveToColumn(0), Print("\r\n"))?;
-        stdout.flush()
-    }
-}
-
-impl Drop for RawMode {
-    fn drop(&mut self) {
-        let _ = terminal::disable_raw_mode();
-    }
-}
-
-fn event_loop(mut pager: Pager, width: u16) -> io::Result<i32> {
+fn event_loop(guard: &TerminalGuard, mut pager: Pager, width: u16) -> io::Result<i32> {
     let mut stdout = io::stdout();
     draw(&mut stdout, &pager.frame(width as usize), true)?;
 
@@ -102,8 +80,10 @@ fn event_loop(mut pager: Pager, width: u16) -> io::Result<i32> {
         match outcome {
             Outcome::Nothing => {}
             Outcome::Draw => draw(&mut stdout, &pager.frame(width as usize), false)?,
-            Outcome::Redraw | Outcome::Suspend => {
-                draw(&mut stdout, &pager.frame(width as usize), true)?
+            Outcome::Redraw => draw(&mut stdout, &pager.frame(width as usize), true)?,
+            Outcome::Suspend => {
+                guard.suspend()?;
+                draw(&mut stdout, &pager.frame(width as usize), true)?;
             }
             Outcome::Quit(code) => return Ok(code),
         }

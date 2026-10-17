@@ -122,6 +122,7 @@ dependencies = [
  "clap",
  "crossterm",
  "pulldown-cmark",
+ "signal-hook",
  "unicode-width",
 ]
 
