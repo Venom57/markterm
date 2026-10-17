@@ -13,7 +13,7 @@ use std::process;
 /// Colour theme selected with `--theme`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 enum Theme {
-    /// Pick a palette automatically (currently the dark palette)
+    /// Detect the terminal background (falls back to dark)
     Auto,
     /// Palette for dark terminal backgrounds
     Dark,
@@ -122,6 +122,23 @@ fn use_color(
     }
 }
 
+/// Resolve `--theme auto` to dark or light. Detection (`detect`) only runs
+/// when colour is on and stdout is a terminal, so piped output pays nothing.
+fn resolve_theme(
+    theme: Theme,
+    use_color: bool,
+    stdout_is_tty: bool,
+    detect: impl FnOnce() -> Option<terminal::Background>,
+) -> Theme {
+    if theme != Theme::Auto || !use_color || !stdout_is_tty {
+        return theme;
+    }
+    match detect() {
+        Some(terminal::Background::Light) => Theme::Light,
+        Some(terminal::Background::Dark) | None => Theme::Dark,
+    }
+}
+
 /// Format an I/O error without the trailing " (os error N)".
 fn describe_error(e: &io::Error) -> String {
     let msg = e.to_string();
@@ -182,14 +199,20 @@ fn main() {
     let content = String::from_utf8_lossy(&bytes);
 
     let stdout_is_tty = io::stdout().is_terminal();
+    let use_color = use_color(
+        cli.theme,
+        cli.color,
+        std::env::var_os("NO_COLOR").as_ref(),
+        stdout_is_tty,
+    );
     let options = RenderOptions {
-        theme: cli.theme,
-        use_color: use_color(
+        theme: resolve_theme(
             cli.theme,
-            cli.color,
-            std::env::var_os("NO_COLOR").as_ref(),
+            use_color,
             stdout_is_tty,
+            terminal::detect_background,
         ),
+        use_color,
         no_wrap: cli.no_wrap,
     };
 
@@ -289,6 +312,25 @@ mod tests {
             Some(&empty),
             true
         ));
+    }
+
+    #[test]
+    fn auto_theme_uses_detected_background() {
+        use terminal::Background;
+        let light = || Some(Background::Light);
+        assert_eq!(resolve_theme(Theme::Auto, true, true, light), Theme::Light);
+        let dark = || Some(Background::Dark);
+        assert_eq!(resolve_theme(Theme::Auto, true, true, dark), Theme::Dark);
+        assert_eq!(resolve_theme(Theme::Auto, true, true, || None), Theme::Dark);
+    }
+
+    #[test]
+    fn theme_detection_skipped_unless_needed() {
+        let never = || -> Option<terminal::Background> { panic!("detection ran") };
+        assert_eq!(resolve_theme(Theme::Auto, false, true, never), Theme::Auto);
+        assert_eq!(resolve_theme(Theme::Auto, true, false, never), Theme::Auto);
+        assert_eq!(resolve_theme(Theme::Light, true, true, never), Theme::Light);
+        assert_eq!(resolve_theme(Theme::None, false, true, never), Theme::None);
     }
 
     #[test]
