@@ -1,5 +1,7 @@
 //! ANSI/VT100 escape code helpers for terminal styling.
 
+use std::borrow::Cow;
+
 pub const RESET: &str = "\x1b[0m";
 pub const BOLD: &str = "\x1b[1m";
 pub const DIM: &str = "\x1b[2m";
@@ -29,6 +31,25 @@ pub fn styled(text: &str, codes: &[&str], use_color: bool) -> String {
         return text.to_string();
     }
     format!("{}{}{}", combine(codes), text, RESET)
+}
+
+/// True for control characters that must never reach the terminal from
+/// document content: C0 controls other than tab and newline, DEL, and C1.
+fn is_unsafe_control(c: char) -> bool {
+    matches!(c, '\0'..='\x08' | '\x0b'..='\x1f' | '\x7f'..='\u{9f}')
+}
+
+/// Replace unsafe control characters (ESC, BEL, CR, DEL, C1, ...) with
+/// U+FFFD so untrusted input cannot inject terminal escape sequences.
+pub fn sanitize(s: &str) -> Cow<'_, str> {
+    if !s.chars().any(is_unsafe_control) {
+        return Cow::Borrowed(s);
+    }
+    Cow::Owned(
+        s.chars()
+            .map(|c| if is_unsafe_control(c) { '\u{FFFD}' } else { c })
+            .collect(),
+    )
 }
 
 /// Calculate the display width of a string, ignoring ANSI escape sequences.
@@ -62,6 +83,15 @@ mod tests {
     fn test_visible_len_with_ansi() {
         let s = format!("{}hello{}", BOLD, RESET);
         assert_eq!(visible_len(&s), 5);
+    }
+
+    #[test]
+    fn test_sanitize() {
+        assert!(matches!(sanitize("plain\ttext\n"), Cow::Borrowed(_)));
+        assert_eq!(
+            sanitize("a\x1b]0;t\x07b\x7f\r\u{9b}"),
+            "a\u{FFFD}]0;t\u{FFFD}b\u{FFFD}\u{FFFD}\u{FFFD}"
+        );
     }
 
     #[test]

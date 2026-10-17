@@ -404,8 +404,8 @@ pub fn render(events: Vec<Event<'_>>, width: u16, use_color: bool, no_wrap: bool
         match event {
             Event::Start(tag) => handle_start_tag(&mut state, &tag),
             Event::End(tag) => handle_end_tag(&mut state, &tag),
-            Event::Text(text) => handle_text(&mut state, &text),
-            Event::Code(code) => handle_code(&mut state, &code),
+            Event::Text(text) => handle_text(&mut state, &style::sanitize(&text)),
+            Event::Code(code) => handle_code(&mut state, &style::sanitize(&code)),
             Event::SoftBreak => handle_soft_break(&mut state),
             Event::HardBreak => handle_hard_break(&mut state),
             Event::Rule => handle_rule(&mut state),
@@ -434,7 +434,9 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
         Tag::CodeBlock(kind) => {
             state.push_blank();
             let label = match kind {
-                CodeBlockKind::Fenced(lang) if !lang.is_empty() => format!("  ╭─ {} ", lang),
+                CodeBlockKind::Fenced(lang) if !lang.is_empty() => {
+                    format!("  ╭─ {} ", style::sanitize(lang))
+                }
                 _ => "  ╭───".to_string(),
             };
             state.emit(&style::styled(&label, &[style::DIM], state.use_color));
@@ -483,7 +485,7 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             state.strikethrough = true;
         }
         Tag::Link { dest_url, .. } => {
-            state.link_url = Some(dest_url.to_string());
+            state.link_url = Some(style::sanitize(dest_url).into_owned());
         }
         Tag::Table(alignments) => {
             state.push_blank();
@@ -1081,6 +1083,40 @@ mod tests {
         let lines = plain("```\n0123456789abcdef\n```", 16);
         assert_eq!(lines[1], "  | 012345678…");
         assert!(lines.iter().all(|l| style::visible_len(l) <= 14));
+    }
+
+    /// Every ESC in `s` must start a renderer-generated SGR sequence.
+    fn only_sgr_escapes(s: &str) -> bool {
+        let mut rest = s;
+        while let Some(i) = rest.find('\x1b') {
+            rest = &rest[i + 1..];
+            let Some(body) = rest.strip_prefix('[') else {
+                return false;
+            };
+            let end = body.find(|c: char| !(c.is_ascii_digit() || c == ';'));
+            match end {
+                Some(e) if body[e..].starts_with('m') => rest = &body[e + 1..],
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn test_control_characters_are_neutralised() {
+        let md = "Evil \x1b]0;title\x07 and \x1b[31mred\x1b[0m\r\x7f `\x1b[2J` \
+                  [x](http://a\x1b/) \u{9b}31m\n\n```\x1b]52\n\x1b[1mcode\x07\n```";
+        let plain_out = render(parser::parse(md), 80, false, false).join("\n");
+        assert!(
+            !plain_out
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t'),
+            "control chars leaked: {:?}",
+            plain_out
+        );
+        let color_out = render(parser::parse(md), 80, true, false).join("\n");
+        assert!(only_sgr_escapes(&color_out), "{:?}", color_out);
+        assert!(!color_out.contains('\x07') && !color_out.contains('\u{9b}'));
     }
 
     #[test]
