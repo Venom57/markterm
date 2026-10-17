@@ -9,6 +9,7 @@ license = "MIT"
 pulldown-cmark = { version = "0.12", default-features = false }
 crossterm = { version = "0.28", default-features = false, features = ["events"] }
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+unicode-width = "0.2"
 
 [profile.release]
 opt-level = "s"
