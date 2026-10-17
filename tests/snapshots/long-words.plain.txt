@@ -1,0 +1,46 @@
+Averyveryverylongheadingword
+withoutanyspaces
+
+Visit
+https://example.com/a/very/l
+ong/path/that/never/ends/at/
+all/ok please.
+
+  • Item
+    https://example.com/anot
+    her/long/url/inside/a/li
+    st/item/here done
+    ◦ Nested
+      Supercalifragilisticex
+      pialidocious_extra_lon
+      g_identifier
+
+  | Quote
+  | https://example.com/quot
+  | ed/long/url/that/must/br
+  | eak/inside/the/border
+
+See the docs
+(https://example.com/docs/wi
+th/a/long/path/that/wraps/to
+o) now.
+
+Inline
+`some_really_long_inline_cod
+e_span_without_spaces` code.
+
+Short `a b  c` code then
+text that continues after
+the code span ok.
+
+  ┌──────┬─────────────────┐
+  | Col  | Link            |
+  ├──────┼─────────────────┤
+  | a    | https://example |
+  |      | .com/averyveryv |
+  |      | erylongurlwitho |
+  |      | utspaces/abc    |
+  | bold | `inline_code_th |
+  |      | at_is_too_long_ |
+  |      | for_the_cell`   |
+  └──────┴─────────────────┘

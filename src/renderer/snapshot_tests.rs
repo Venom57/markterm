@@ -16,7 +16,8 @@ use crate::parser;
 /// Per-fixture render settings: (width, no_wrap).
 fn settings_for(name: &str) -> (u16, bool) {
     match name {
-        "wrapping-styles" | "code-in-list-ordered" => (40, false),
+        "wrapping-styles" | "code-in-list-ordered" | "unicode-width" => (40, false),
+        "long-words" => (30, false),
         "narrow-table" => (20, false),
         "nowrap-indent" => (80, true),
         _ => (80, false),
@@ -106,16 +107,9 @@ fn check_snapshot(path: &Path, actual: &str, update: bool) -> Result<(), String>
     }
 }
 
-#[test]
-fn fixtures_match_snapshots() {
-    let root = manifest_dir();
-    let fixtures = root.join("tests/fixtures");
-    let snapshots = root.join("tests/snapshots");
-    let update = std::env::var_os("UPDATE_SNAPSHOTS").is_some_and(|v| v == "1");
-    if update {
-        fs::create_dir_all(&snapshots).expect("create snapshots dir");
-    }
-
+/// All `tests/fixtures/*.md` paths, sorted.
+fn fixture_paths() -> Vec<PathBuf> {
+    let fixtures = manifest_dir().join("tests/fixtures");
     let mut entries: Vec<PathBuf> = fs::read_dir(&fixtures)
         .expect("read tests/fixtures")
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -123,6 +117,75 @@ fn fixtures_match_snapshots() {
         .collect();
     entries.sort();
     assert!(!entries.is_empty(), "no fixtures found");
+    entries
+}
+
+/// True when every SGR sequence opened in `line` is closed by its end:
+/// the last escape sequence (if any) is a reset and the line ends with it.
+fn sgr_closed(line: &str) -> bool {
+    use crate::style::{tokens, Token};
+    let mut open = false;
+    for t in tokens(line) {
+        if let Token::Esc(e) = t {
+            open = !(e == "\x1b[0m" || e == "\x1b[m");
+        }
+    }
+    !open
+}
+
+/// Every rendered line, in both modes and at several widths, is no wider
+/// than the render width and (in colour) leaves no SGR state open, so the
+/// pager can start a page at any line.
+#[test]
+fn fixtures_satisfy_line_invariants() {
+    let mut failures = Vec::new();
+    for path in fixture_paths() {
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let bytes = fs::read(path).expect("read fixture");
+        let content = String::from_utf8_lossy(&bytes);
+        let (snap_width, no_wrap) = settings_for(&name);
+        for width in [snap_width, 24, 33, 50, 80] {
+            for nw in [no_wrap, !no_wrap] {
+                for color in [false, true] {
+                    let lines = render(parser::parse(&content), width, color, nw);
+                    for (i, line) in lines.iter().enumerate() {
+                        let w = crate::style::display_width(line);
+                        if w > width as usize {
+                            failures.push(format!(
+                                "{name} w={width} no_wrap={nw} color={color} line {i}: width {w}: {line:?}"
+                            ));
+                        }
+                        if color && !sgr_closed(line) {
+                            failures.push(format!(
+                                "{name} w={width} no_wrap={nw} line {i}: open SGR: {line:?}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn sgr_closed_detects_open_state() {
+    assert!(sgr_closed("plain"));
+    assert!(sgr_closed("\x1b[1mx\x1b[0m"));
+    assert!(!sgr_closed("\x1b[1mx"));
+    assert!(!sgr_closed("\x1b[1mx\x1b[0m\x1b[2my"));
+}
+
+#[test]
+fn fixtures_match_snapshots() {
+    let root = manifest_dir();
+    let snapshots = root.join("tests/snapshots");
+    let update = std::env::var_os("UPDATE_SNAPSHOTS").is_some_and(|v| v == "1");
+    if update {
+        fs::create_dir_all(&snapshots).expect("create snapshots dir");
+    }
+
+    let entries = fixture_paths();
 
     let mut failures = Vec::new();
     for path in &entries {
