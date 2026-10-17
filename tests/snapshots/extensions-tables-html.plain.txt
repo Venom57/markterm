@@ -29,5 +29,5 @@ Inline Ctrl+C html.
 Line one
 line two (hard break)
 
-  • [✓] done item
-  • [ ] todo item
+  [✓] done item
+  [ ] todo item

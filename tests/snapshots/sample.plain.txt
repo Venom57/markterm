@@ -51,10 +51,10 @@ Ordered
 
 Task List
 
-  • [✓] Parse markdown
-  • [✓] Render to ANSI
-  • [ ] Add pager
-  • [ ] Ship it
+  [✓] Parse markdown
+  [✓] Render to ANSI
+  [ ] Add pager
+  [ ] Ship it
 
 Block Quotes
 

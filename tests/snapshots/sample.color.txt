@@ -51,10 +51,10 @@ Here's a plain code block:
 
 ␛[1m␛[93mTask List␛[0m
 
-  ␛[36m• ␛[0m␛[32m␛[1m[✓]␛[0m Parse markdown
-  ␛[36m• ␛[0m␛[32m␛[1m[✓]␛[0m Render to ANSI
-  ␛[36m• ␛[0m␛[2m[ ]␛[0m Add pager
-  ␛[36m• ␛[0m␛[2m[ ]␛[0m Ship it
+  ␛[32m␛[1m[✓]␛[0m Parse markdown
+  ␛[32m␛[1m[✓]␛[0m Render to ANSI
+  ␛[2m[ ]␛[0m Add pager
+  ␛[2m[ ]␛[0m Ship it
 
 ␛[1m␛[96mBlock Quotes␛[0m
 

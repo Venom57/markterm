@@ -30,6 +30,8 @@ struct RenderState {
     in_table_cell: bool,
     /// Inside a YAML front matter block (skipped).
     in_metadata: bool,
+    /// Item counts of the lists not yet started (see `list_item_counts`).
+    list_item_counts: std::vec::IntoIter<usize>,
     /// Buffered raw HTML of the HTML block being read.
     html_block: Option<String>,
     /// Inline buffer offset where the current image placeholder starts.
@@ -41,6 +43,9 @@ enum Container {
     List {
         /// Next number for ordered lists, `None` for bullet lists.
         next: Option<u64>,
+        /// Digits of the widest number in an ordered list, so that numbers
+        /// are right-aligned (` 9.` / `10.`).
+        num_width: usize,
     },
     Item {
         /// Styled marker (e.g. `• `) printed on the item's first line.
@@ -74,6 +79,7 @@ impl RenderState {
             table_rows: Vec::new(),
             in_table_cell: false,
             in_metadata: false,
+            list_item_counts: Vec::new().into_iter(),
             html_block: None,
             image_start: None,
         }
@@ -495,9 +501,38 @@ fn truncate_styled(text: &str, max_visible: usize, use_color: bool) -> String {
     result
 }
 
+/// Number of direct items in each list, in the order the lists start.
+fn list_item_counts(events: &[Event<'_>]) -> Vec<usize> {
+    let mut counts = Vec::new();
+    let mut open = Vec::new();
+    for event in events {
+        match event {
+            Event::Start(Tag::List(_)) => {
+                open.push(counts.len());
+                counts.push(0);
+            }
+            Event::End(TagEnd::List(_)) => {
+                open.pop();
+            }
+            Event::Start(Tag::Item) => {
+                if let Some(&i) = open.last() {
+                    counts[i] += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    counts
+}
+
+fn digits(n: u64) -> usize {
+    n.checked_ilog10().unwrap_or(0) as usize + 1
+}
+
 /// Render a stream of markdown events into styled terminal lines.
 pub fn render(events: Vec<Event<'_>>, width: u16, use_color: bool, no_wrap: bool) -> Vec<String> {
     let mut state = RenderState::new(width, use_color, no_wrap);
+    state.list_item_counts = list_item_counts(&events).into_iter();
 
     for event in events {
         if state.in_metadata {
@@ -578,15 +613,25 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             } else {
                 state.push_blank();
             }
-            state.containers.push(Container::List { next: *first });
+            let items = state.list_item_counts.next().unwrap_or(1) as u64;
+            let num_width = first.map_or(0, |start| {
+                digits(start.saturating_add(items.saturating_sub(1)))
+            });
+            state.containers.push(Container::List {
+                next: *first,
+                num_width,
+            });
         }
         Tag::Item => {
             state.flush_wrapped();
             let depth = state.list_depth().saturating_sub(1);
             let marker = match state.containers.last_mut() {
-                Some(Container::List { next: Some(n) }) => {
-                    let s = format!("{}. ", n);
-                    *n += 1;
+                Some(Container::List {
+                    next: Some(n),
+                    num_width,
+                }) => {
+                    let s = format!("{:>w$}. ", n, w = *num_width);
+                    *n = n.saturating_add(1);
                     s
                 }
                 _ => match depth {
@@ -852,6 +897,17 @@ fn handle_task_marker(state: &mut RenderState, checked: bool) {
     } else {
         style::styled("[ ]", &[style::DIM], state.use_color)
     };
+    // The checkbox replaces the item's bullet when it hasn't been printed.
+    if let Some(Container::Item {
+        marker: item_marker,
+        width,
+        pending: true,
+    }) = state.containers.last_mut()
+    {
+        *item_marker = format!("{} ", marker);
+        *width = 4;
+        return;
+    }
     state.inline_buf().push_str(&format!("{} ", marker));
 }
 
@@ -1472,6 +1528,38 @@ mod tests {
         let color = render(parser::parse("![a](a.png)"), 80, true, false);
         let (d, r) = (style::DIM, style::RESET);
         assert_eq!(color, vec![format!("{d}[image: {r}{d}a{r}{d}]{r}")]);
+    }
+
+    #[test]
+    fn test_ordered_numbers_right_aligned() {
+        let md = "8. eight\n9. nine\n10. ten\n    - sub";
+        assert_eq!(
+            plain(md, 80),
+            vec!["   8. eight", "   9. nine", "  10. ten", "      ◦ sub"]
+        );
+        assert_eq!(digits(0), 1);
+        assert_eq!(digits(9), 1);
+        assert_eq!(digits(10), 2);
+        assert_eq!(digits(u64::MAX), 20);
+    }
+
+    #[test]
+    fn test_task_checkbox_replaces_bullet() {
+        assert_eq!(
+            plain("- [x] done\n- [ ] todo item that wraps", 20),
+            vec!["  [✓] done", "  [ ] todo item", "      that wraps"]
+        );
+        assert_eq!(
+            plain("- [x] loose\n\n- [ ] two", 80),
+            vec!["  [✓] loose", "", "  [ ] two"]
+        );
+        let color = render(parser::parse("- [x] a"), 80, true, false);
+        assert!(color[0].starts_with(&format!(
+            "  {}{}[✓]{} a",
+            style::FG_GREEN,
+            style::BOLD,
+            style::RESET
+        )));
     }
 
     #[test]

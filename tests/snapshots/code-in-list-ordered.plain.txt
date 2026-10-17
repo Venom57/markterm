@@ -4,6 +4,6 @@
       | code in list with a really lo…
       ╰───
 
-  8. eight
-  9. nine
+   8. eight
+   9. nine
   10. ten
