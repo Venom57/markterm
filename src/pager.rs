@@ -10,27 +10,30 @@ use std::io::{self, Write};
 
 use crate::style;
 
-pub fn run(lines: &[String], term_height: u16, filename: &str) -> io::Result<()> {
+/// Run the pager over `lines`. Returns the process exit code.
+///
+/// `rerender` is accepted for future resize support; it is not used yet.
+pub fn run(
+    lines: Vec<String>,
+    filename: &str,
+    _rerender: Option<&dyn Fn(u16) -> Vec<String>>,
+) -> io::Result<i32> {
+    let lines = &lines[..];
+    let (_, term_height) = crate::terminal::size();
     let mut stdout = io::stdout();
 
     // Page height: terminal height minus 1 for the status line
     let page_height = (term_height.saturating_sub(1)) as usize;
-    if page_height == 0 {
-        // Terminal too small, just dump everything
-        for line in lines {
-            writeln!(stdout, "{}", line)?;
-        }
-        return Ok(());
-    }
-
     let total_lines = lines.len();
 
-    // If content fits on one screen, just print it
-    if total_lines <= page_height {
-        for line in lines {
-            writeln!(stdout, "{}", line)?;
-        }
-        return Ok(());
+    // Terminal too small, or content fits on one screen: just print it
+    if page_height == 0 || total_lines <= page_height {
+        let result = print_all(lines);
+        return match result {
+            Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(0),
+            Err(e) => Err(e),
+            Ok(()) => Ok(0),
+        };
     }
 
     // Enter raw mode for interactive paging
@@ -42,7 +45,16 @@ pub fn run(lines: &[String], term_height: u16, filename: &str) -> io::Result<()>
     execute!(stdout, cursor::MoveToColumn(0))?;
     writeln!(stdout)?;
 
-    result
+    result.map(|()| 0)
+}
+
+fn print_all(lines: &[String]) -> io::Result<()> {
+    let stdout = io::stdout();
+    let mut out = io::BufWriter::new(stdout.lock());
+    for line in lines {
+        writeln!(out, "{}", line)?;
+    }
+    out.flush()
 }
 
 fn run_pager_loop(
