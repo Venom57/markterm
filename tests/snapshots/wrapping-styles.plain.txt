@@ -17,8 +17,7 @@ now.
 
 See docs
 (https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all)
-and https://auto.link/x
-(https://auto.link/x).
+and https://auto.link/x.
 
 日本語のテキストはとても長いのでこの行は折り返されるべきですが幅の計算が正しくないと端末の幅を超えてしまいます
 日本語 日本語 日本語 日本語

@@ -11,7 +11,7 @@ Inline ␛[48;5;236mcode spans ␛[0mrender with a distinct background.
 
 ␛[1m␛[96mLinks␛[0m
 
-Check out Rust␛[2m (https://www.rust-lang.org/)␛[0m for more information.
+Check out ␛[4mRust␛[0m␛[2m (https://www.rust-lang.org/)␛[0m for more information.
 
 ␛[1m␛[96mCode Blocks␛[0m
 

@@ -15,10 +15,9 @@ Visit
 https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all/whatsoever/ok
 now.
 
-See docs␛[2m
+See ␛[4mdocs␛[0m␛[2m
 (https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all)␛[0m
-and https://auto.link/x␛[2m
-(https://auto.link/x)␛[0m.
+and ␛[4mhttps://auto.link/x␛[0m.
 
 日本語のテキストはとても長いのでこの行は折り返されるべきですが幅の計算が正しくないと端末の幅を超えてしまいます
 日本語 日本語 日本語 日本語

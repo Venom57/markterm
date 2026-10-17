@@ -1,6 +1,6 @@
 //! Converts pulldown-cmark events into ANSI-styled, word-wrapped terminal lines.
 
-use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, LinkType, Tag, TagEnd};
 
 use crate::style;
 
@@ -22,7 +22,7 @@ struct RenderState {
     /// Buffered text of the fenced/indented code block being read.
     code_block: Option<String>,
     in_heading: Option<u8>,
-    link_url: Option<String>,
+    link: Option<LinkState>,
     table_row: Vec<String>,
     table_cell_buf: String,
     table_alignments: Vec<pulldown_cmark::Alignment>,
@@ -61,7 +61,7 @@ impl RenderState {
             strikethrough: false,
             code_block: None,
             in_heading: None,
-            link_url: None,
+            link: None,
             table_row: Vec::new(),
             table_cell_buf: String::new(),
             table_alignments: Vec::new(),
@@ -261,18 +261,58 @@ impl RenderState {
         if self.strikethrough {
             codes.push(style::STRIKETHROUGH);
         }
+        if self.link.is_some() {
+            codes.push(style::UNDERLINE);
+        }
         style::combine(&codes)
     }
 
-    fn current_style_suffix(&self) -> String {
-        if !self.use_color {
-            String::new()
-        } else if self.bold || self.italic || self.strikethrough || self.in_heading.is_some() {
-            style::RESET.to_string()
+    /// Where inline content goes: the current table cell or the paragraph.
+    fn inline_buf(&mut self) -> &mut String {
+        if self.in_table_cell {
+            &mut self.table_cell_buf
         } else {
-            String::new()
+            &mut self.current_line
         }
     }
+
+    /// Append text with the active inline styles.
+    fn push_inline(&mut self, text: &str) {
+        let pre = self.current_style_prefix();
+        let buf = self.inline_buf();
+        if pre.is_empty() {
+            buf.push_str(text);
+        } else {
+            buf.push_str(&pre);
+            buf.push_str(text);
+            buf.push_str(style::RESET);
+        }
+    }
+}
+
+/// The link currently being rendered.
+struct LinkState {
+    url: String,
+    /// False for autolinks/email links, whose text already is the URL.
+    show_url: bool,
+    /// Byte offset in the inline buffer where the link text starts.
+    text_start: usize,
+}
+
+/// Remove ANSI escape sequences, leaving only visible text.
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_escape = false;
+    for ch in s.chars() {
+        if in_escape {
+            in_escape = !ch.is_ascii_alphabetic();
+        } else if ch == '\x1b' {
+            in_escape = true;
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 /// Split a string (potentially containing ANSI codes) into whitespace-delimited segments,
@@ -484,8 +524,17 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
         Tag::Strikethrough => {
             state.strikethrough = true;
         }
-        Tag::Link { dest_url, .. } => {
-            state.link_url = Some(style::sanitize(dest_url).into_owned());
+        Tag::Link {
+            link_type,
+            dest_url,
+            ..
+        } => {
+            let text_start = state.inline_buf().len();
+            state.link = Some(LinkState {
+                url: style::sanitize(dest_url).into_owned(),
+                show_url: !matches!(link_type, LinkType::Autolink | LinkType::Email),
+                text_start,
+            });
         }
         Tag::Table(alignments) => {
             state.push_blank();
@@ -545,10 +594,21 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
             state.strikethrough = false;
         }
         TagEnd::Link => {
-            if let Some(url) = state.link_url.take() {
-                let url_display =
-                    style::styled(&format!(" ({})", url), &[style::DIM], state.use_color);
-                state.current_line.push_str(&url_display);
+            if let Some(link) = state.link.take() {
+                let text = state
+                    .inline_buf()
+                    .get(link.text_start..)
+                    .map(strip_ansi)
+                    .unwrap_or_default();
+                let text = text.trim();
+                let redundant = text == link.url
+                    || link.url.strip_prefix("mailto:") == Some(text)
+                    || link.url.is_empty();
+                if link.show_url && !redundant {
+                    let url_display =
+                        style::styled(&format!(" ({})", link.url), &[style::DIM], state.use_color);
+                    state.inline_buf().push_str(&url_display);
+                }
             }
         }
         TagEnd::Table => {
@@ -574,34 +634,21 @@ fn handle_text(state: &mut RenderState, text: &str) {
         return;
     }
 
-    if state.in_table_cell {
-        state.table_cell_buf.push_str(text);
-        return;
-    }
-
-    // Accumulate styled text into current_line. Word wrapping happens at flush.
-    let style_pre = state.current_style_prefix();
-    let style_suf = state.current_style_suffix();
-    state
-        .current_line
-        .push_str(&format!("{}{}{}", style_pre, text, style_suf));
+    // Accumulate styled text; word wrapping happens at flush.
+    state.push_inline(text);
 }
 
 fn handle_code(state: &mut RenderState, code: &str) {
-    if state.in_table_cell {
-        state.table_cell_buf.push_str(code);
-        return;
-    }
     let styled = if state.use_color {
         format!("{} {} {}", style::BG_GREY, code, style::RESET)
     } else {
         format!("`{}`", code)
     };
-    state.current_line.push_str(&styled);
+    state.inline_buf().push_str(&styled);
 }
 
 fn handle_soft_break(state: &mut RenderState) {
-    state.current_line.push(' ');
+    state.inline_buf().push(' ');
 }
 
 /// Expand tabs to 4-column tab stops.
@@ -667,7 +714,7 @@ fn handle_task_marker(state: &mut RenderState, checked: bool) {
     } else {
         style::styled("[ ]", &[style::DIM], state.use_color)
     };
-    state.current_line.push_str(&format!("{} ", marker));
+    state.inline_buf().push_str(&format!("{} ", marker));
 }
 
 fn render_table(state: &mut RenderState) {
@@ -816,8 +863,10 @@ fn render_table(state: &mut RenderState) {
                 let pad = w.saturating_sub(visible);
                 let padded = format!("{}{}", cell_text, " ".repeat(pad));
 
-                let styled_cell = if row_idx == 0 {
-                    style::styled(&padded, &[style::BOLD], use_color)
+                let styled_cell = if row_idx == 0 && use_color {
+                    // Re-open bold after any inline style reset inside the cell.
+                    let rebold = format!("{}{}", style::RESET, style::BOLD);
+                    style::styled(&padded.replace(style::RESET, &rebold), &[style::BOLD], true)
                 } else {
                     padded
                 };
@@ -1117,6 +1166,33 @@ mod tests {
         let color_out = render(parser::parse(md), 80, true, false).join("\n");
         assert!(only_sgr_escapes(&color_out), "{:?}", color_out);
         assert!(!color_out.contains('\x07') && !color_out.contains('\u{9b}'));
+    }
+
+    #[test]
+    fn test_link_in_table_cell_stays_in_cell() {
+        let md = "| A | B |\n|---|---|\n| [l](https://x.io) | `c` **b** |\n\nafter";
+        let lines = plain(md, 80);
+        assert!(lines.iter().any(|l| l.contains("| l (https://x.io) |")));
+        assert!(lines.iter().any(|l| l.contains("`c` b")));
+        assert_eq!(lines.last().unwrap(), "after");
+        assert!(!lines.iter().any(|l| l.trim() == "(https://x.io)"));
+        let color = render(parser::parse(md), 80, true, false).join("\n");
+        assert!(color.contains(&format!("{}b{}", style::BOLD, style::RESET)));
+    }
+
+    #[test]
+    fn test_autolink_url_not_repeated() {
+        assert_eq!(
+            plain("<https://a.io> <me@x.org> [https://b.io](https://b.io)", 80),
+            vec!["https://a.io me@x.org https://b.io"]
+        );
+        assert_eq!(plain("[t](https://a.io)", 80), vec!["t (https://a.io)"]);
+    }
+
+    #[test]
+    fn test_link_text_underlined() {
+        let lines = render(parser::parse("[t](https://a.io)"), 80, true, false);
+        assert!(lines[0].starts_with(&format!("{}t{}", style::UNDERLINE, style::RESET)));
     }
 
     #[test]
