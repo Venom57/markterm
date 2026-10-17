@@ -1,4 +1,4 @@
-/// A `more`-style pager: displays lines one page at a time with keyboard navigation.
+//! A `more`-style pager: displays lines one page at a time with keyboard navigation.
 
 use crossterm::{
     cursor,
@@ -103,8 +103,7 @@ fn run_pager_loop(
                 | KeyEvent {
                     code: KeyCode::PageUp,
                     ..
-                }
-                => {
+                } => {
                     offset = offset.saturating_sub(page_height);
                     draw_page(stdout, lines, offset, page_height, total_lines, filename)?;
                 }
@@ -115,7 +114,8 @@ fn run_pager_loop(
                     ..
                 }
                 | KeyEvent {
-                    code: KeyCode::Down, ..
+                    code: KeyCode::Down,
+                    ..
                 }
                 | KeyEvent {
                     code: KeyCode::Char('j'),
@@ -148,7 +148,8 @@ fn run_pager_loop(
                     ..
                 }
                 | KeyEvent {
-                    code: KeyCode::Home, ..
+                    code: KeyCode::Home,
+                    ..
                 } => {
                     offset = 0;
                     draw_page(stdout, lines, offset, page_height, total_lines, filename)?;
@@ -210,8 +211,8 @@ fn draw_page(
 
     // Display lines for this page
     let end = (offset + page_height).min(total_lines);
-    for i in offset..end {
-        writeln!(stdout, "{}\r", &lines[i])?;
+    for line in &lines[offset..end] {
+        writeln!(stdout, "{}\r", line)?;
     }
 
     // Pad remaining lines if page is not full

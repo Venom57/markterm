@@ -1,4 +1,4 @@
-/// Terminal capability detection and dimension queries.
+//! Terminal capability detection and dimension queries.
 
 use crossterm::terminal;
 

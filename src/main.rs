@@ -1,7 +1,6 @@
 mod pager;
 mod parser;
 mod renderer;
-#[allow(dead_code)]
 mod style;
 mod terminal;
 
@@ -11,7 +10,11 @@ use std::io::{self, IsTerminal, Read};
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "markterm", version, about = "Render markdown in the terminal with built-in paging")]
+#[command(
+    name = "markterm",
+    version,
+    about = "Render markdown in the terminal with built-in paging"
+)]
 struct Cli {
     /// Markdown file to display (use - for stdin)
     file: String,

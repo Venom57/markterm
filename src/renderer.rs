@@ -1,6 +1,6 @@
-/// Converts pulldown-cmark events into ANSI-styled, word-wrapped terminal lines.
+//! Converts pulldown-cmark events into ANSI-styled, word-wrapped terminal lines.
 
-use pulldown_cmark::{Event, Tag, TagEnd, CodeBlockKind};
+use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
 
 use crate::style;
 
@@ -29,8 +29,8 @@ struct RenderState {
 
 #[derive(Clone)]
 enum ListContext {
-    Unordered(usize),  // depth
-    Ordered(u64), // current number
+    Unordered(usize), // depth
+    Ordered(u64),     // current number
 }
 
 impl RenderState {
@@ -66,7 +66,7 @@ impl RenderState {
     fn push_blank(&mut self) {
         // Flush any pending content first
         self.flush_wrapped();
-        if self.lines.last().map_or(true, |l| !l.is_empty()) {
+        if self.lines.last().is_some_and(|l| !l.is_empty()) {
             self.lines.push(String::new());
         }
     }
@@ -93,7 +93,8 @@ impl RenderState {
             if visible <= self.width {
                 self.lines.push(full);
             } else {
-                let truncated = truncate_styled(&full, self.width.saturating_sub(1), self.use_color);
+                let truncated =
+                    truncate_styled(&full, self.width.saturating_sub(1), self.use_color);
                 self.lines.push(truncated);
             }
             return;
@@ -239,7 +240,11 @@ fn wrap_cell_text(text: &str, max_width: usize, no_wrap: bool, use_color: bool) 
     }
 
     if no_wrap {
-        return vec![truncate_styled(text, max_width.saturating_sub(1), use_color)];
+        return vec![truncate_styled(
+            text,
+            max_width.saturating_sub(1),
+            use_color,
+        )];
     }
 
     let words = split_styled_words(text);
@@ -349,11 +354,8 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             state.push_blank();
             if let CodeBlockKind::Fenced(lang) = kind {
                 if !lang.is_empty() {
-                    let label = style::styled(
-                        &format!("  ╭─ {} ", lang),
-                        &[style::DIM],
-                        state.use_color,
-                    );
+                    let label =
+                        style::styled(&format!("  ╭─ {} ", lang), &[style::DIM], state.use_color);
                     state.push_line(&label);
                 } else {
                     let label = style::styled("  ╭───", &[style::DIM], state.use_color);
@@ -379,13 +381,11 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             state.flush_wrapped();
             let prefix = state.indent_prefix();
             let marker = match state.list_stack.last() {
-                Some(ListContext::Unordered(depth)) => {
-                    match depth {
-                        0 => "• ".to_string(),
-                        1 => "◦ ".to_string(),
-                        _ => "▪ ".to_string(),
-                    }
-                }
+                Some(ListContext::Unordered(depth)) => match depth {
+                    0 => "• ".to_string(),
+                    1 => "◦ ".to_string(),
+                    _ => "▪ ".to_string(),
+                },
                 Some(ListContext::Ordered(num)) => {
                     let s = format!("{}. ", num);
                     if let Some(ListContext::Ordered(n)) = state.list_stack.last_mut() {
@@ -473,11 +473,8 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
         }
         TagEnd::Link => {
             if let Some(url) = state.link_url.take() {
-                let url_display = style::styled(
-                    &format!(" ({})", url),
-                    &[style::DIM],
-                    state.use_color,
-                );
+                let url_display =
+                    style::styled(&format!(" ({})", url), &[style::DIM], state.use_color);
                 state.current_line.push_str(&url_display);
             }
         }
@@ -492,7 +489,9 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
             state.table_rows.push(state.table_row.clone());
         }
         TagEnd::TableCell => {
-            state.table_row.push(std::mem::take(&mut state.table_cell_buf));
+            state
+                .table_row
+                .push(std::mem::take(&mut state.table_cell_buf));
             state.in_table_cell = false;
         }
         _ => {}
@@ -520,7 +519,9 @@ fn handle_text(state: &mut RenderState, text: &str) {
     // Accumulate styled text into current_line. Word wrapping happens at flush.
     let style_pre = state.current_style_prefix();
     let style_suf = state.current_style_suffix();
-    state.current_line.push_str(&format!("{}{}{}", style_pre, text, style_suf));
+    state
+        .current_line
+        .push_str(&format!("{}{}{}", style_pre, text, style_suf));
 }
 
 fn handle_code(state: &mut RenderState, code: &str) {
@@ -632,7 +633,13 @@ fn render_table(state: &mut RenderState) {
                     let mut extra = remaining % unsettled;
                     for i in 0..num_cols {
                         if !settled[i] {
-                            col_widths[i] = share + if extra > 0 { extra -= 1; 1 } else { 0 };
+                            col_widths[i] = share
+                                + if extra > 0 {
+                                    extra -= 1;
+                                    1
+                                } else {
+                                    0
+                                };
                         }
                     }
                     break;
@@ -648,26 +655,31 @@ fn render_table(state: &mut RenderState) {
     let no_wrap = state.no_wrap;
     let use_color = state.use_color;
 
-    let draw_separator = |state: &mut RenderState, left: &str, mid: &str, right: &str, fill: &str| {
-        let mut line = format!("  {}", left);
-        for (i, w) in col_widths.iter().enumerate() {
-            line.push_str(&fill.repeat(*w + 2));
-            if i < num_cols - 1 {
-                line.push_str(mid);
+    let draw_separator =
+        |state: &mut RenderState, left: &str, mid: &str, right: &str, fill: &str| {
+            let mut line = format!("  {}", left);
+            for (i, w) in col_widths.iter().enumerate() {
+                line.push_str(&fill.repeat(*w + 2));
+                if i < num_cols - 1 {
+                    line.push_str(mid);
+                }
             }
-        }
-        line.push_str(right);
-        state.push_line(&style::styled(&line, &[style::DIM], state.use_color));
-    };
+            line.push_str(right);
+            state.push_line(&style::styled(&line, &[style::DIM], state.use_color));
+        };
 
     draw_separator(state, "┌", "┬", "┐", "─");
 
     for (row_idx, row) in state.table_rows.clone().iter().enumerate() {
         // Wrap each cell to its allocated column width
-        let mut wrapped_cells: Vec<Vec<String>> = row.iter().enumerate().map(|(i, cell)| {
-            let w = col_widths.get(i).copied().unwrap_or(3);
-            wrap_cell_text(cell, w, no_wrap, use_color)
-        }).collect();
+        let mut wrapped_cells: Vec<Vec<String>> = row
+            .iter()
+            .enumerate()
+            .map(|(i, cell)| {
+                let w = col_widths.get(i).copied().unwrap_or(3);
+                wrap_cell_text(cell, w, no_wrap, use_color)
+            })
+            .collect();
 
         // Pad to num_cols if row has fewer cells
         while wrapped_cells.len() < num_cols {
@@ -688,9 +700,7 @@ fn render_table(state: &mut RenderState) {
 
             for (i, cell_lines) in wrapped_cells.iter().enumerate() {
                 let w = col_widths.get(i).copied().unwrap_or(3);
-                let cell_text = cell_lines.get(line_idx)
-                    .map(|s| s.as_str())
-                    .unwrap_or("");
+                let cell_text = cell_lines.get(line_idx).map(|s| s.as_str()).unwrap_or("");
 
                 // Pad to column width based on visible length
                 let visible = style::visible_len(cell_text);
@@ -758,7 +768,12 @@ mod tests {
         let events = parser::parse("This is **bold** and *italic* text.");
         let lines = render(events, 80, false, false);
         let content_lines: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
-        assert_eq!(content_lines.len(), 1, "Expected 1 content line, got: {:?}", content_lines);
+        assert_eq!(
+            content_lines.len(),
+            1,
+            "Expected 1 content line, got: {:?}",
+            content_lines
+        );
         assert!(content_lines[0].contains("bold"));
         assert!(content_lines[0].contains("italic"));
     }
@@ -792,18 +807,29 @@ mod tests {
         let content_lines: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
         assert!(content_lines.len() > 1, "Long text should wrap");
         for line in &content_lines {
-            assert!(style::visible_len(line) <= 40, "No line should exceed width");
+            assert!(
+                style::visible_len(line) <= 40,
+                "No line should exceed width"
+            );
         }
     }
 
     #[test]
     fn test_no_wrap_truncates_with_ellipsis() {
-        let events = parser::parse("This is a very long line that should be truncated when no-wrap mode is enabled.");
+        let events = parser::parse(
+            "This is a very long line that should be truncated when no-wrap mode is enabled.",
+        );
         let lines = render(events, 30, false, true);
         let content_lines: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
         assert_eq!(content_lines.len(), 1, "No-wrap should produce one line");
-        assert!(content_lines[0].ends_with('…'), "Truncated line should end with ellipsis");
-        assert!(style::visible_len(content_lines[0]) <= 30, "Line should not exceed width");
+        assert!(
+            content_lines[0].ends_with('…'),
+            "Truncated line should end with ellipsis"
+        );
+        assert!(
+            style::visible_len(content_lines[0]) <= 30,
+            "Line should not exceed width"
+        );
     }
 
     #[test]
@@ -829,7 +855,12 @@ mod tests {
         // Count data row lines (lines with | between header separator and bottom border)
         let table_lines: Vec<&String> = lines.iter().filter(|l| l.contains('|')).collect();
         // Should have: header + at least 2 lines for the data row (since cell wraps)
-        assert!(table_lines.len() > 3, "Expected multi-line row, got {} table lines: {:?}", table_lines.len(), table_lines);
+        assert!(
+            table_lines.len() > 3,
+            "Expected multi-line row, got {} table lines: {:?}",
+            table_lines.len(),
+            table_lines
+        );
     }
 
     #[test]
@@ -841,10 +872,19 @@ mod tests {
 
     #[test]
     fn test_wrap_cell_text_wraps() {
-        let lines = wrap_cell_text("this is a longer text that needs wrapping", 15, false, false);
+        let lines = wrap_cell_text(
+            "this is a longer text that needs wrapping",
+            15,
+            false,
+            false,
+        );
         assert!(lines.len() > 1, "Should wrap: {:?}", lines);
         for line in &lines {
-            assert!(style::visible_len(line) <= 15, "Wrapped line too wide: '{}'", line);
+            assert!(
+                style::visible_len(line) <= 15,
+                "Wrapped line too wide: '{}'",
+                line
+            );
         }
     }
 }

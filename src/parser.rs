@@ -1,4 +1,4 @@
-/// Markdown parsing wrapper around pulldown-cmark.
+//! Markdown parsing wrapper around pulldown-cmark.
 
 use pulldown_cmark::{Event, Options, Parser};
 

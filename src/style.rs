@@ -1,4 +1,4 @@
-/// ANSI/VT100 escape code helpers for terminal styling.
+//! ANSI/VT100 escape code helpers for terminal styling.
 
 pub const RESET: &str = "\x1b[0m";
 pub const BOLD: &str = "\x1b[1m";
@@ -9,17 +9,11 @@ pub const REVERSE: &str = "\x1b[7m";
 pub const STRIKETHROUGH: &str = "\x1b[9m";
 
 // Foreground colors
-pub const FG_RED: &str = "\x1b[31m";
 pub const FG_GREEN: &str = "\x1b[32m";
-pub const FG_YELLOW: &str = "\x1b[33m";
-pub const FG_BLUE: &str = "\x1b[34m";
-pub const FG_MAGENTA: &str = "\x1b[35m";
 pub const FG_CYAN: &str = "\x1b[36m";
-pub const FG_WHITE: &str = "\x1b[37m";
 pub const FG_BRIGHT_WHITE: &str = "\x1b[97m";
 pub const FG_BRIGHT_CYAN: &str = "\x1b[96m";
 pub const FG_BRIGHT_YELLOW: &str = "\x1b[93m";
-pub const FG_BRIGHT_GREEN: &str = "\x1b[92m";
 
 // Background colors
 pub const BG_GREY: &str = "\x1b[48;5;236m";
