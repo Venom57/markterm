@@ -6,11 +6,12 @@ description = "A markdown viewer for the terminal with built-in paging"
 license = "MIT"
 
 [dependencies]
-pulldown-cmark = "0.12"
-crossterm = "0.28"
-clap = { version = "4", features = ["derive"] }
+pulldown-cmark = { version = "0.12", default-features = false }
+crossterm = { version = "0.28", default-features = false, features = ["events"] }
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 
 [profile.release]
-opt-level = "z"
+opt-level = "s"
 lto = true
+codegen-units = 1
 strip = true
