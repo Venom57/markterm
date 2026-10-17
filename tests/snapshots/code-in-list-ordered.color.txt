@@ -1,0 +1,9 @@
+  ␛[36m• ␛[0mitem
+
+    ␛[2m  ╭───␛[0m
+    ␛[2m  │ ␛[0mcode in list with a really lo…
+    ␛[2m  ╰───␛[0m
+
+  ␛[36m 8. ␛[0meight
+  ␛[36m 9. ␛[0mnine
+  ␛[36m10. ␛[0mten

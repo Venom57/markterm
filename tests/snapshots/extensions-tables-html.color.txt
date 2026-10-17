@@ -1,0 +1,33 @@
+␛[1m␛[4m␛[97mH1 ␛[0m␛[48;5;236mcode ␛[0m␛[1m␛[4m␛[97mTitle␛[0m
+
+␛[1m␛[96mH2␛[0m
+
+␛[1m␛[93mH3␛[0m
+
+␛[2m  ┌──────┬─────────────────────────────────────────────┬─────────────────────┐␛[0m
+  ␛[2m│␛[0m ␛[1mLeft␛[0m ␛[2m│␛[0m ␛[1m                  Center                   ␛[0m ␛[2m│␛[0m ␛[1m              Right␛[0m ␛[2m│␛[0m
+␛[2m  ├──────┼─────────────────────────────────────────────┼─────────────────────┤␛[0m
+  ␛[2m│␛[0m ␛[1mbold␛[0m ␛[2m│␛[0m                   ␛[48;5;236m code ␛[0m                    ␛[2m│␛[0m ␛[4mlink␛[0m␛[2m (https://x.io)␛[0m ␛[2m│␛[0m
+  ␛[2m│␛[0m a    ␛[2m│␛[0m https://example.com/averyveryverylongurlwithoutspaces/abc ␛[2m│␛[0m                   1 ␛[2m│␛[0m
+  ␛[2m│␛[0m 漢字漢字 ␛[2m│␛[0m                      b                      ␛[2m│␛[0m                   2 ␛[2m│␛[0m
+␛[2m  └──────┴─────────────────────────────────────────────┴─────────────────────┘␛[0m
+
+After table paragraph.
+
+Text with footnote␛[2m[1]␛[0m.
+
+␛[2m[1]: ␛[0mThe footnote body.
+
+␛[2m[image: ␛[0m␛[2mAlt text here␛[0m␛[2m]␛[0m
+
+␛[2mClick␛[0m
+
+Hidden body
+
+Inline Ctrl+C html.
+
+Line one
+line two (hard break)
+
+  ␛[32m␛[1m[✓]␛[0m done item
+  ␛[2m[ ]␛[0m todo item

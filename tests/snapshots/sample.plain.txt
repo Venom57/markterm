@@ -1,0 +1,96 @@
+markterm Sample Document
+
+This is a sample markdown file to test `markterm` rendering capabilities.
+
+Text Formatting
+
+Here is some bold text, some italic text, and some strikethrough text. You can
+also combine bold and italic together.
+
+Inline `code spans` render with a distinct background.
+
+Links
+
+Check out Rust (https://www.rust-lang.org/) for more information.
+
+Code Blocks
+
+  ╭─ rust 
+  | fn main() {
+  |     println!("Hello, world!");
+  |     let x = 42;
+  |     for i in 0..x {
+  |         println!("{}", i);
+  |     }
+  | }
+  ╰───
+
+Here's a plain code block:
+
+  ╭───
+  | $ cargo build --release
+  | $ ./target/release/markterm README.md
+  ╰───
+
+Lists
+
+Unordered
+
+  • First item
+  • Second item
+    ◦ Nested item A
+    ◦ Nested item B
+      ▪ Deeply nested
+  • Third item
+
+Ordered
+
+  1. Step one
+  2. Step two
+  3. Step three
+
+Task List
+
+  [✓] Parse markdown
+  [✓] Render to ANSI
+  [ ] Add pager
+  [ ] Ship it
+
+Block Quotes
+
+  | "The best way to predict the future is to invent it." — Alan Kay
+
+  | Nested block quotes contain multiple lines of wisdom.
+
+Tables
+
+  ┌─────────────┬────────┬──────────┐
+  | Feature     | Status | Priority |
+  ├─────────────┼────────┼──────────┤
+  | Headings    | Done   | High     |
+  | Bold/Italic | Done   | High     |
+  | Code blocks | Done   | High     |
+  | Tables      | Done   | Medium   |
+  | Pager       | Done   | High     |
+  └─────────────┴────────┴──────────┘
+
+Horizontal Rules
+
+Above the rule.
+
+──────────────────────────────────────────────────────────────────────────────
+
+Below the rule.
+
+Long Paragraph for Word Wrapping
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
+nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt
+in culpa qui officia deserunt mollit anim id est laborum.
+
+The End
+
+That's all folks! Press `q` to quit.

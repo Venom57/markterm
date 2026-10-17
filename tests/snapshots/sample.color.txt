@@ -1,0 +1,96 @@
+␛[1m␛[4m␛[97mmarkterm Sample Document␛[0m
+
+This is a ␛[1msample markdown file␛[0m to test ␛[48;5;236mmarkterm ␛[0mrendering capabilities.
+
+␛[1m␛[96mText Formatting␛[0m
+
+Here is some ␛[1mbold text␛[0m, some ␛[3mitalic text␛[0m, and some ␛[9mstrikethrough text␛[0m. You can
+also combine ␛[1mbold and ␛[0m␛[1m␛[3mitalic␛[0m␛[1m together␛[0m.
+
+Inline ␛[48;5;236mcode spans ␛[0mrender with a distinct background.
+
+␛[1m␛[96mLinks␛[0m
+
+Check out ␛[4mRust␛[0m␛[2m (https://www.rust-lang.org/)␛[0m for more information.
+
+␛[1m␛[96mCode Blocks␛[0m
+
+␛[2m  ╭─ rust ␛[0m
+␛[2m  │ ␛[0mfn main() {
+␛[2m  │ ␛[0m    println!("Hello, world!");
+␛[2m  │ ␛[0m    let x = 42;
+␛[2m  │ ␛[0m    for i in 0..x {
+␛[2m  │ ␛[0m        println!("{}", i);
+␛[2m  │ ␛[0m    }
+␛[2m  │ ␛[0m}
+␛[2m  ╰───␛[0m
+
+Here's a plain code block:
+
+␛[2m  ╭───␛[0m
+␛[2m  │ ␛[0m$ cargo build --release
+␛[2m  │ ␛[0m$ ./target/release/markterm README.md
+␛[2m  ╰───␛[0m
+
+␛[1m␛[96mLists␛[0m
+
+␛[1m␛[93mUnordered␛[0m
+
+  ␛[36m• ␛[0mFirst item
+  ␛[36m• ␛[0mSecond item
+    ␛[36m◦ ␛[0mNested item A
+    ␛[36m◦ ␛[0mNested item B
+      ␛[36m▪ ␛[0mDeeply nested
+  ␛[36m• ␛[0mThird item
+
+␛[1m␛[93mOrdered␛[0m
+
+  ␛[36m1. ␛[0mStep one
+  ␛[36m2. ␛[0mStep two
+  ␛[36m3. ␛[0mStep three
+
+␛[1m␛[93mTask List␛[0m
+
+  ␛[32m␛[1m[✓]␛[0m Parse markdown
+  ␛[32m␛[1m[✓]␛[0m Render to ANSI
+  ␛[2m[ ]␛[0m Add pager
+  ␛[2m[ ]␛[0m Ship it
+
+␛[1m␛[96mBlock Quotes␛[0m
+
+  ␛[2m│ ␛[0m"The best way to predict the future is to invent it." — Alan Kay
+
+  ␛[2m│ ␛[0mNested block quotes contain multiple lines of wisdom.
+
+␛[1m␛[96mTables␛[0m
+
+␛[2m  ┌─────────────┬────────┬──────────┐␛[0m
+  ␛[2m│␛[0m ␛[1mFeature    ␛[0m ␛[2m│␛[0m ␛[1mStatus␛[0m ␛[2m│␛[0m ␛[1mPriority␛[0m ␛[2m│␛[0m
+␛[2m  ├─────────────┼────────┼──────────┤␛[0m
+  ␛[2m│␛[0m Headings    ␛[2m│␛[0m Done   ␛[2m│␛[0m High     ␛[2m│␛[0m
+  ␛[2m│␛[0m Bold/Italic ␛[2m│␛[0m Done   ␛[2m│␛[0m High     ␛[2m│␛[0m
+  ␛[2m│␛[0m Code blocks ␛[2m│␛[0m Done   ␛[2m│␛[0m High     ␛[2m│␛[0m
+  ␛[2m│␛[0m Tables      ␛[2m│␛[0m Done   ␛[2m│␛[0m Medium   ␛[2m│␛[0m
+  ␛[2m│␛[0m Pager       ␛[2m│␛[0m Done   ␛[2m│␛[0m High     ␛[2m│␛[0m
+␛[2m  └─────────────┴────────┴──────────┘␛[0m
+
+␛[1m␛[96mHorizontal Rules␛[0m
+
+Above the rule.
+
+␛[2m──────────────────────────────────────────────────────────────────────────────␛[0m
+
+Below the rule.
+
+␛[1m␛[96mLong Paragraph for Word Wrapping␛[0m
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
+nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt
+in culpa qui officia deserunt mollit anim id est laborum.
+
+␛[1m␛[96mThe End␛[0m
+
+That's all folks! Press ␛[48;5;236mq ␛[0mto quit.

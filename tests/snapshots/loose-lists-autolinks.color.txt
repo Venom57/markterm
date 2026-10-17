@@ -1,0 +1,15 @@
+  ␛[36m• ␛[0mone
+
+  ␛[36m• ␛[0mtwo
+
+  ␛[2m│ ␛[0m  ␛[36m• ␛[0mquoted item
+  ␛[2m│␛[0m
+  ␛[2m│ ␛[0m␛[2m│ ␛[0mnested
+  ␛[2m│␛[0m
+  ␛[2m│ ␛[0mback to outer
+
+␛[2m  ╭───␛[0m
+␛[2m  │ ␛[0mcode
+␛[2m  ╰───␛[0m
+
+␛[4mx␛[0m␛[2m (https://x.io)␛[0m ␛[4mhttps://auto.io␛[0m

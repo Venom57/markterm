@@ -1,0 +1,28 @@
+  ␛[36m• ␛[0mThis is a long list item that
+    should wrap onto a second line to
+    check hanging indent alignment
+    here
+
+␛[1mbold text that spans many words and
+must wrap across lines to see style
+leakage behaviour␛[0m
+
+  ␛[2m│ ␛[0m␛[1mbold quote that is long enough to
+  ␛[2m│ ␛[0mwrap across multiple lines inside
+  ␛[2m│ ␛[0mthe blockquote border ok␛[0m
+
+Visit
+https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all/whatsoever/ok
+now.
+
+See ␛[4mdocs␛[0m␛[2m
+(https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all)␛[0m
+and ␛[4mhttps://auto.link/x␛[0m.
+
+日本語のテキストはとても長いのでこの行は折り返されるべきですが幅の計算が正しくないと端末の幅を超えてしまいます
+日本語 日本語 日本語 日本語
+
+Emoji 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
+🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 end
+
+Use ␛[48;5;236mfoo bar ␛[0mand ␛[48;5;236mx ␛[0mhere.
