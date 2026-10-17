@@ -1,14 +1,15 @@
   ␛[36m• ␛[0mThis is a long list item that
-  should wrap onto a second line to
-  check hanging indent alignment here
+    should wrap onto a second line to
+    check hanging indent alignment
+    here
 
 ␛[1mbold text that spans many words and
 must wrap across lines to see style
 leakage behaviour␛[0m
 
-␛[2m  │ ␛[0m␛[1mbold quote that is long enough to
-␛[2m  │ ␛[0mwrap across multiple lines inside
-␛[2m  │ ␛[0mthe blockquote border ok␛[0m
+  ␛[2m│ ␛[0m␛[1mbold quote that is long enough to
+  ␛[2m│ ␛[0mwrap across multiple lines inside
+  ␛[2m│ ␛[0mthe blockquote border ok␛[0m
 
 Visit
 https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all/whatsoever/ok

@@ -1,6 +1,7 @@
   • This is a long list item that
-  should wrap onto a second line to
-  check hanging indent alignment here
+    should wrap onto a second line to
+    check hanging indent alignment
+    here
 
 bold text that spans many words and
 must wrap across lines to see style

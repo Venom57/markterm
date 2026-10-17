@@ -1,15 +1,12 @@
-  ␛[36m• ␛[0m
+  ␛[36m• ␛[0mone
 
-  one
-  ␛[36m• ␛[0m
+  ␛[36m• ␛[0mtwo
 
-  two
-
-␛[2m  │ ␛[0m  ␛[2m│ ␛[0m␛[36m• ␛[0mquoted item
-
-␛[2m  │ ␛[0mnested
-
-back to outer
+  ␛[2m│ ␛[0m  ␛[36m• ␛[0mquoted item
+  ␛[2m│␛[0m
+  ␛[2m│ ␛[0m␛[2m│ ␛[0mnested
+  ␛[2m│␛[0m
+  ␛[2m│ ␛[0mback to outer
 
 ␛[2m  ╭───␛[0m
 ␛[2m  │ ␛[0mcode

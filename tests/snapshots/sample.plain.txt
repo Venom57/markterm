@@ -39,9 +39,9 @@ Lists
 Unordered
 
   • First item
-    • Second item
+  • Second item
     ◦ Nested item A
-      ◦ Nested item B
+    ◦ Nested item B
       ▪ Deeply nested
   • Third item
 

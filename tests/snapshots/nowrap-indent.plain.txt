@@ -1,4 +1,4 @@
-      • item in nowrap mode
-        ◦ nested
+  • item in nowrap mode
+    ◦ nested
 
   | quote in nowrap

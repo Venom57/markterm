@@ -9,28 +9,40 @@ struct RenderState {
     no_wrap: bool,
     width: usize,
     lines: Vec<String>,
+    /// True when the last emitted line is blank (or nothing has been emitted
+    /// yet), so consecutive blank lines collapse into one.
+    last_blank: bool,
     current_line: String,
-    indent: usize,
+    /// Nesting of block containers (quotes, lists, items), outermost first.
+    /// The line prefix is derived from this stack whenever a line is emitted.
+    containers: Vec<Container>,
     bold: bool,
     italic: bool,
     strikethrough: bool,
     in_code_block: bool,
-    in_blockquote: bool,
     in_heading: Option<u8>,
-    list_stack: Vec<ListContext>,
     link_url: Option<String>,
     table_row: Vec<String>,
     table_cell_buf: String,
     table_alignments: Vec<pulldown_cmark::Alignment>,
     table_rows: Vec<Vec<String>>,
-    in_table_head: bool,
     in_table_cell: bool,
 }
 
-#[derive(Clone)]
-enum ListContext {
-    Unordered(usize), // depth
-    Ordered(u64),     // current number
+enum Container {
+    BlockQuote,
+    List {
+        /// Next number for ordered lists, `None` for bullet lists.
+        next: Option<u64>,
+    },
+    Item {
+        /// Styled marker (e.g. `• `) printed on the item's first line.
+        marker: String,
+        /// Visible width of `marker`; continuation lines indent by this much.
+        width: usize,
+        /// True until the marker has been printed.
+        pending: bool,
+    },
 }
 
 impl RenderState {
@@ -40,35 +52,123 @@ impl RenderState {
             no_wrap,
             width: width.saturating_sub(2) as usize, // margin
             lines: Vec::new(),
+            last_blank: true,
             current_line: String::new(),
-            indent: 0,
+            containers: Vec::new(),
             bold: false,
             italic: false,
             strikethrough: false,
             in_code_block: false,
-            in_blockquote: false,
             in_heading: None,
-            list_stack: Vec::new(),
             link_url: None,
             table_row: Vec::new(),
             table_cell_buf: String::new(),
             table_alignments: Vec::new(),
             table_rows: Vec::new(),
-            in_table_head: false,
             in_table_cell: false,
         }
     }
 
-    fn push_line(&mut self, line: &str) {
-        self.lines.push(line.to_string());
+    /// Emit a finished line, prefixed with the current container prefix.
+    /// The first line emitted in a list item carries the item's marker.
+    fn emit(&mut self, content: &str) {
+        let prefix = self.take_prefix();
+        self.lines.push(format!("{}{}", prefix, content));
+        self.last_blank = false;
     }
 
+    /// Emit a separator line (once), keeping blockquote borders intact.
     fn push_blank(&mut self) {
-        // Flush any pending content first
         self.flush_wrapped();
-        if self.lines.last().is_some_and(|l| !l.is_empty()) {
-            self.lines.push(String::new());
+        if !self.last_blank {
+            let bare = self.bare_prefix();
+            self.lines.push(bare);
+            self.last_blank = true;
         }
+    }
+
+    fn quote_bar(&self, trailing_space: bool) -> String {
+        let bar = if self.use_color { "│" } else { "|" };
+        let space = if trailing_space { " " } else { "" };
+        style::styled(&format!("{}{}", bar, space), &[style::DIM], self.use_color)
+    }
+
+    /// Build the line prefix for `self.containers[..len]`.
+    ///
+    /// With `markers`, pending item markers are printed instead of their
+    /// indentation. With `bare`, the last container (a blockquote) is drawn
+    /// without its trailing space, for blank lines.
+    fn build_prefix(&self, len: usize, markers: bool, bare: bool) -> String {
+        let mut prefix = String::new();
+        for (i, c) in self.containers[..len].iter().enumerate() {
+            let in_item = i > 0 && matches!(self.containers[i - 1], Container::Item { .. });
+            match c {
+                Container::BlockQuote => {
+                    if i == 0 {
+                        prefix.push_str("  ");
+                    }
+                    prefix.push_str(&self.quote_bar(!(bare && i + 1 == len)));
+                }
+                Container::List { .. } => {
+                    if !in_item {
+                        prefix.push_str("  ");
+                    }
+                }
+                Container::Item {
+                    marker,
+                    width,
+                    pending,
+                } => {
+                    if markers && *pending {
+                        prefix.push_str(marker);
+                    } else {
+                        prefix.push_str(&" ".repeat(*width));
+                    }
+                }
+            }
+        }
+        prefix
+    }
+
+    /// Prefix for the next line; consumes pending item markers.
+    fn take_prefix(&mut self) -> String {
+        let prefix = self.build_prefix(self.containers.len(), true, false);
+        for c in &mut self.containers {
+            if let Container::Item { pending, .. } = c {
+                *pending = false;
+            }
+        }
+        prefix
+    }
+
+    /// Prefix for blank lines: quote borders only, no trailing whitespace.
+    fn bare_prefix(&self) -> String {
+        match self
+            .containers
+            .iter()
+            .rposition(|c| matches!(c, Container::BlockQuote))
+        {
+            Some(last_quote) => self.build_prefix(last_quote + 1, false, true),
+            None => String::new(),
+        }
+    }
+
+    /// Visible width of the line prefix at the current nesting.
+    fn prefix_width(&self) -> usize {
+        style::visible_len(&self.build_prefix(self.containers.len(), false, false))
+    }
+
+    /// Number of enclosing lists (used to pick the bullet glyph).
+    fn list_depth(&self) -> usize {
+        self.containers
+            .iter()
+            .filter(|c| matches!(c, Container::List { .. }))
+            .count()
+    }
+
+    /// True when the innermost container is a list item.
+    fn directly_in_item(&self) -> bool {
+        matches!(self.containers.last(), Some(Container::Item { .. }))
     }
 
     /// Flush `current_line` with word wrapping (or truncation in no_wrap mode).
@@ -77,33 +177,31 @@ impl RenderState {
             return;
         }
         let text = std::mem::take(&mut self.current_line);
-        let prefix = self.indent_prefix();
-        let prefix_visible_len = style::visible_len(&prefix);
-        let available = self.width.saturating_sub(prefix_visible_len);
+        let segments = split_styled_words(&text);
+        if segments.is_empty() {
+            return;
+        }
+        let available = self.width.saturating_sub(self.prefix_width());
 
         if available == 0 {
-            self.lines.push(format!("{}{}", prefix, text));
+            self.emit(&text);
             return;
         }
 
         if self.no_wrap {
             // Truncate mode: single line, add ellipsis if it exceeds width
-            let full = format!("{}{}", prefix, text);
-            let visible = style::visible_len(&full);
-            if visible <= self.width {
-                self.lines.push(full);
+            if style::visible_len(&text) <= available {
+                self.emit(&text);
             } else {
-                let truncated =
-                    truncate_styled(&full, self.width.saturating_sub(1), self.use_color);
-                self.lines.push(truncated);
+                let truncated = truncate_styled(&text, available.saturating_sub(1), self.use_color);
+                self.emit(&truncated);
             }
             return;
         }
 
-        // Word-wrap mode
-        let segments = split_styled_words(&text);
-
-        let mut line_buf = prefix.clone();
+        // Word-wrap mode. Continuation lines get the same prefix width as the
+        // first line, so wrapped list text hangs under the item text.
+        let mut line_buf = String::new();
         let mut line_visible = 0usize;
 
         for seg in &segments {
@@ -117,14 +215,14 @@ impl RenderState {
                 line_buf.push_str(seg);
                 line_visible += 1 + seg_visible;
             } else {
-                self.lines.push(line_buf);
-                line_buf = format!("{}{}", prefix, seg);
+                let done = std::mem::replace(&mut line_buf, seg.clone());
+                self.emit(&done);
                 line_visible = seg_visible;
             }
         }
 
-        if line_visible > 0 || !line_buf.is_empty() {
-            self.lines.push(line_buf);
+        if !line_buf.is_empty() {
+            self.emit(&line_buf);
         }
     }
 
@@ -173,21 +271,6 @@ impl RenderState {
         } else {
             String::new()
         }
-    }
-
-    fn indent_prefix(&self) -> String {
-        let mut prefix = String::new();
-        if self.in_blockquote {
-            if self.use_color {
-                prefix.push_str(&format!("{}  │ {}", style::DIM, style::RESET));
-            } else {
-                prefix.push_str("  | ");
-            }
-        }
-        if self.indent > 0 {
-            prefix.push_str(&" ".repeat(self.indent));
-        }
-        prefix
     }
 }
 
@@ -341,13 +424,11 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             state.in_heading = Some(*level as u8);
         }
         Tag::Paragraph => {
-            if !state.in_code_block {
-                state.push_blank();
-            }
+            state.push_blank();
         }
         Tag::BlockQuote(_) => {
-            state.in_blockquote = true;
             state.push_blank();
+            state.containers.push(Container::BlockQuote);
         }
         Tag::CodeBlock(kind) => {
             state.in_code_block = true;
@@ -356,51 +437,48 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
                 if !lang.is_empty() {
                     let label =
                         style::styled(&format!("  ╭─ {} ", lang), &[style::DIM], state.use_color);
-                    state.push_line(&label);
+                    state.emit(&label);
                 } else {
                     let label = style::styled("  ╭───", &[style::DIM], state.use_color);
-                    state.push_line(&label);
+                    state.emit(&label);
                 }
             } else {
                 let label = style::styled("  ╭───", &[style::DIM], state.use_color);
-                state.push_line(&label);
+                state.emit(&label);
             }
         }
         Tag::List(first) => {
-            if state.list_stack.is_empty() {
+            if state.directly_in_item() {
+                // Tight nesting: print the parent item's text before the
+                // indentation changes.
+                state.flush_wrapped();
+            } else {
                 state.push_blank();
             }
-            let depth = state.list_stack.len();
-            match first {
-                Some(start) => state.list_stack.push(ListContext::Ordered(*start)),
-                None => state.list_stack.push(ListContext::Unordered(depth)),
-            }
-            state.indent = (depth + 1) * 2;
+            state.containers.push(Container::List { next: *first });
         }
         Tag::Item => {
             state.flush_wrapped();
-            let prefix = state.indent_prefix();
-            let marker = match state.list_stack.last() {
-                Some(ListContext::Unordered(depth)) => match depth {
+            let depth = state.list_depth().saturating_sub(1);
+            let marker = match state.containers.last_mut() {
+                Some(Container::List { next: Some(n) }) => {
+                    let s = format!("{}. ", n);
+                    *n += 1;
+                    s
+                }
+                _ => match depth {
                     0 => "• ".to_string(),
                     1 => "◦ ".to_string(),
                     _ => "▪ ".to_string(),
                 },
-                Some(ListContext::Ordered(num)) => {
-                    let s = format!("{}. ", num);
-                    if let Some(ListContext::Ordered(n)) = state.list_stack.last_mut() {
-                        *n += 1;
-                    }
-                    s
-                }
-                None => "• ".to_string(),
             };
-            let styled_marker = if state.use_color {
-                style::styled(&marker, &[style::FG_CYAN], state.use_color)
-            } else {
-                marker
-            };
-            state.current_line = format!("{}{}", prefix, styled_marker);
+            let width = style::visible_len(&marker);
+            let marker = style::styled(&marker, &[style::FG_CYAN], state.use_color);
+            state.containers.push(Container::Item {
+                marker,
+                width,
+                pending: true,
+            });
         }
         Tag::Emphasis => {
             state.italic = true;
@@ -419,11 +497,7 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             state.table_alignments = alignments.clone();
             state.table_rows.clear();
         }
-        Tag::TableHead => {
-            state.in_table_head = true;
-            state.table_row.clear();
-        }
-        Tag::TableRow => {
+        Tag::TableHead | Tag::TableRow => {
             state.table_row.clear();
         }
         Tag::TableCell => {
@@ -445,22 +519,27 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
         }
         TagEnd::BlockQuote(_) => {
             state.flush_wrapped();
-            state.in_blockquote = false;
+            state.containers.pop();
         }
         TagEnd::CodeBlock => {
             let label = style::styled("  ╰───", &[style::DIM], state.use_color);
-            state.push_line(&label);
+            state.emit(&label);
             state.in_code_block = false;
         }
         TagEnd::List(_) => {
-            state.list_stack.pop();
-            state.indent = state.list_stack.len() * 2;
-            if state.list_stack.is_empty() {
-                state.push_blank();
-            }
+            state.flush_wrapped();
+            state.containers.pop();
         }
         TagEnd::Item => {
             state.flush_wrapped();
+            if matches!(
+                state.containers.last(),
+                Some(Container::Item { pending: true, .. })
+            ) {
+                // Empty item: still show its marker.
+                state.emit("");
+            }
+            state.containers.pop();
         }
         TagEnd::Emphasis => {
             state.italic = false;
@@ -481,12 +560,9 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
         TagEnd::Table => {
             render_table(state);
         }
-        TagEnd::TableHead => {
-            state.in_table_head = false;
-            state.table_rows.push(state.table_row.clone());
-        }
-        TagEnd::TableRow => {
-            state.table_rows.push(state.table_row.clone());
+        TagEnd::TableHead | TagEnd::TableRow => {
+            let row = std::mem::take(&mut state.table_row);
+            state.table_rows.push(row);
         }
         TagEnd::TableCell => {
             state
@@ -506,7 +582,7 @@ fn handle_text(state: &mut RenderState, text: &str) {
             } else {
                 format!("  | {}", line)
             };
-            state.push_line(&formatted);
+            state.emit(&formatted);
         }
         return;
     }
@@ -549,9 +625,9 @@ fn handle_hard_break(state: &mut RenderState) {
 
 fn handle_rule(state: &mut RenderState) {
     state.push_blank();
-    let rule: String = "─".repeat(state.width);
+    let rule: String = "─".repeat(state.width.saturating_sub(state.prefix_width()));
     let styled_rule = style::styled(&rule, &[style::DIM], state.use_color);
-    state.push_line(&styled_rule);
+    state.emit(&styled_rule);
     state.push_blank();
 }
 
@@ -592,7 +668,10 @@ fn render_table(state: &mut RenderState) {
     // Table overhead: 2 (margin) + 1 (left border) + 1 (right border) + 2*num_cols (spaces) + (num_cols-1) (mid borders)
     // = 3 + 3*num_cols
     let overhead = 3 + 3 * num_cols;
-    let max_content = state.width.saturating_sub(overhead);
+    let max_content = state
+        .width
+        .saturating_sub(state.prefix_width())
+        .saturating_sub(overhead);
     let total: usize = col_widths.iter().sum();
 
     if total > max_content && max_content > 0 {
@@ -665,7 +744,7 @@ fn render_table(state: &mut RenderState) {
                 }
             }
             line.push_str(right);
-            state.push_line(&style::styled(&line, &[style::DIM], state.use_color));
+            state.emit(&style::styled(&line, &[style::DIM], state.use_color));
         };
 
     draw_separator(state, "┌", "┬", "┐", "─");
@@ -729,7 +808,7 @@ fn render_table(state: &mut RenderState) {
             } else {
                 line.push_str(" |");
             }
-            state.push_line(&line);
+            state.emit(&line);
         }
 
         if row_idx == 0 {
@@ -889,5 +968,59 @@ mod tests {
                 line
             );
         }
+    }
+
+    fn plain(md: &str, width: u16) -> Vec<String> {
+        render(parser::parse(md), width, false, false)
+    }
+
+    #[test]
+    fn test_no_leading_blank_line() {
+        assert_eq!(plain("hello", 80), vec!["hello"]);
+    }
+
+    #[test]
+    fn test_loose_list_marker_stays_with_text() {
+        assert_eq!(plain("- one\n\n- two", 80), vec!["  • one", "", "  • two"]);
+    }
+
+    #[test]
+    fn test_nested_list_parent_at_parent_indent() {
+        assert_eq!(
+            plain("- parent\n  - child\n- next", 80),
+            vec!["  • parent", "    ◦ child", "  • next"]
+        );
+    }
+
+    #[test]
+    fn test_list_in_quote_single_border() {
+        assert_eq!(plain("> - item", 80), vec!["  |   • item"]);
+    }
+
+    #[test]
+    fn test_no_wrap_list_indent_not_doubled() {
+        let lines = render(parser::parse("- item\n  - nested"), 80, false, true);
+        assert_eq!(lines, vec!["  • item", "    ◦ nested"]);
+    }
+
+    #[test]
+    fn test_nested_blockquotes() {
+        assert_eq!(
+            plain("> outer\n>\n> > inner\n>\n> back", 80),
+            vec!["  | outer", "  |", "  | | inner", "  |", "  | back"]
+        );
+    }
+
+    #[test]
+    fn test_wrapped_list_item_hanging_indent() {
+        assert_eq!(
+            plain("- aaaa bbbb cccc dddd", 15),
+            vec!["  • aaaa bbbb", "    cccc dddd"]
+        );
+    }
+
+    #[test]
+    fn test_empty_list_item_keeps_marker() {
+        assert_eq!(plain("-\n- x", 80), vec!["  • ", "  • x"]);
     }
 }

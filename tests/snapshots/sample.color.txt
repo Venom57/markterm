@@ -39,9 +39,9 @@ Here's a plain code block:
 ␛[1m␛[93mUnordered␛[0m
 
   ␛[36m• ␛[0mFirst item
-    ␛[36m• ␛[0mSecond item
+  ␛[36m• ␛[0mSecond item
     ␛[36m◦ ␛[0mNested item A
-      ␛[36m◦ ␛[0mNested item B
+    ␛[36m◦ ␛[0mNested item B
       ␛[36m▪ ␛[0mDeeply nested
   ␛[36m• ␛[0mThird item
 
@@ -60,9 +60,9 @@ Here's a plain code block:
 
 ␛[1m␛[96mBlock Quotes␛[0m
 
-␛[2m  │ ␛[0m"The best way to predict the future is to invent it." — Alan Kay
+  ␛[2m│ ␛[0m"The best way to predict the future is to invent it." — Alan Kay
 
-␛[2m  │ ␛[0mNested block quotes contain multiple lines of wisdom.
+  ␛[2m│ ␛[0mNested block quotes contain multiple lines of wisdom.
 
 ␛[1m␛[96mTables␛[0m
 

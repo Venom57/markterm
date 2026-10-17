@@ -1,18 +1,15 @@
-  ╭───
-  | line a
-  | 
-  | line b
-  | 
-  ╰───
+  |   ╭───
+  |   | line a
+  |   | 
+  |   | line b
+  |   | 
+  |   ╰───
 
-  •
+  • item
 
-  item
-
-  ╭───
-  | indented a
-  | 
-  | indented b
-  | 
-  ╰───
-
+      ╭───
+      | indented a
+      | 
+      | indented b
+      | 
+      ╰───

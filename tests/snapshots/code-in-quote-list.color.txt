@@ -1,18 +1,15 @@
-␛[2m  ╭───␛[0m
-␛[2m  │ ␛[0mline a
-␛[2m  │ ␛[0m
-␛[2m  │ ␛[0mline b
-␛[2m  │ ␛[0m
-␛[2m  ╰───␛[0m
+  ␛[2m│ ␛[0m␛[2m  ╭───␛[0m
+  ␛[2m│ ␛[0m␛[2m  │ ␛[0mline a
+  ␛[2m│ ␛[0m␛[2m  │ ␛[0m
+  ␛[2m│ ␛[0m␛[2m  │ ␛[0mline b
+  ␛[2m│ ␛[0m␛[2m  │ ␛[0m
+  ␛[2m│ ␛[0m␛[2m  ╰───␛[0m
 
-  ␛[36m• ␛[0m
+  ␛[36m• ␛[0mitem
 
-  item
-
-␛[2m  ╭───␛[0m
-␛[2m  │ ␛[0mindented a
-␛[2m  │ ␛[0m
-␛[2m  │ ␛[0mindented b
-␛[2m  │ ␛[0m
-␛[2m  ╰───␛[0m
-
+    ␛[2m  ╭───␛[0m
+    ␛[2m  │ ␛[0mindented a
+    ␛[2m  │ ␛[0m
+    ␛[2m  │ ␛[0mindented b
+    ␛[2m  │ ␛[0m
+    ␛[2m  ╰───␛[0m

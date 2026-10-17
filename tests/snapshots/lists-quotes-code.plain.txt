@@ -5,26 +5,22 @@
   | 
   ╰───
 
-    • tight parent
+  • tight parent
     ◦ child one
     ◦ child two
   • next
 
-  1.
+  1. loose one
 
-  loose one
-  2.
-
-  loose two
+  2. loose two
 
   | outer
-
+  |
   | second para
+  |
+  | | inner nested
+  |
+  | back to outer
 
-  | inner nested
-
-back to outer
-
-  |   | • list in quote
-  |   | • second
-
+  |   • list in quote
+  |   • second

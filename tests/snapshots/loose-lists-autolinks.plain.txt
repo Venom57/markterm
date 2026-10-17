@@ -1,15 +1,12 @@
-  •
+  • one
 
-  one
-  •
+  • two
 
-  two
-
-  |   | • quoted item
-
-  | nested
-
-back to outer
+  |   • quoted item
+  |
+  | | nested
+  |
+  | back to outer
 
   ╭───
   | code

@@ -34,4 +34,3 @@ line two (hard break)
 
   ␛[36m• ␛[0m␛[32m␛[1m[✓]␛[0m done item
   ␛[36m• ␛[0m␛[2m[ ]␛[0m todo item
-
