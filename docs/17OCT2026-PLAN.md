@@ -278,3 +278,39 @@ were generated ad hoc and are not committed.
 - Real themes with a light palette and auto detection (#37); no-colour structure
   (#39, #40, #49); help screen and `(END)` marker (#42); exit codes and suspend
   (#44); search (#46); extra keys (#47); then M5 items (#48).
+
+---
+
+## Status — 17 OCT 2026 (end of day)
+
+Implemented on branch `plan/17oct2026` (pushed to `origin`).
+
+| Metric | Before (`877401f`) | After |
+|--------|--------------------|-------|
+| Tests | 16 unit | 130 unit + 13 CLI integration (incl. 27 snapshot files, line-width/style invariant over all fixtures × 3 themes × 5 widths) |
+| `cargo clippy -- -D warnings` | 8 errors | clean (`--all-targets`) |
+| `cargo fmt --check` | 26 hunks | clean |
+| Release binary | 1,017,464 B | 1,046,648 B |
+| Render 5.8 MB file | ~400 ms | ~280 ms |
+| Source lines (`src/`) | 1,307 | 5,257 |
+
+### Item status
+
+- **Done:** #1–#47, #49–#53. (#22 fixed in Phase 0; #25/#44 signal & suspend
+  handling are Unix-only.)
+- **Not done:** #48 syntax highlighting and config file (spec M5 stretch) — would
+  add sizeable dependencies; deferred for a separate decision.
+
+### Known limitations / follow-ups
+
+- ZWJ emoji sequences are measured as the sum of their parts (e.g. a family emoji
+  counts as 6 columns, not 2). Lines never overflow, but such lines can wrap early
+  or misalign table columns slightly.
+- Background detection (`--theme auto`) uses a 100 ms hard timeout; an OSC 11 reply
+  arriving later (slow SSH) could surface as stray keypresses. Possible mitigation:
+  longer timeout when `SSH_TTY` is set. Brightness threshold uses Rec. 709 weights
+  on raw sRGB values (not WCAG relative luminance).
+- Search highlight uses `\e[27m` to end reverse video, which also cancels reverse
+  styling inside an already-reversed span for the rest of that span.
+- With `panic = "abort"`, a release-build panic exits with SIGABRT (134) after the
+  panic hook restores the terminal.
