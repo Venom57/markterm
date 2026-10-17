@@ -135,6 +135,27 @@ impl Pager {
         self.offset >= self.max_offset()
     }
 
+    /// Adapt to a new page height and, optionally, freshly rendered lines
+    /// (after a width change). The top line keeps its relative position in
+    /// the document; a view at the end stays at the end.
+    pub fn resize(&mut self, page_height: usize, lines: Option<Vec<String>>) {
+        let was_at_end = self.offset > 0 && self.at_end();
+        if let Some(lines) = lines {
+            let old_total = self.total();
+            if old_total > 0 {
+                let scaled = self.offset as u128 * lines.len() as u128 / old_total as u128;
+                self.offset = usize::try_from(scaled).unwrap_or(usize::MAX);
+            }
+            self.lines = lines;
+        }
+        self.page_height = page_height.max(1);
+        self.offset = if was_at_end {
+            self.max_offset()
+        } else {
+            self.offset.min(self.max_offset())
+        };
+    }
+
     /// Move the top line to `offset` (clamped). Returns whether it changed.
     fn scroll_to(&mut self, offset: usize) -> bool {
         let new = offset.min(self.max_offset());
@@ -439,6 +460,44 @@ mod tests {
         assert_eq!(p.handle_key(&ctrl('c')), Outcome::Quit(130));
         assert_eq!(p.handle_key(&ctrl('z')), Outcome::Suspend);
         assert_eq!(p.handle_key(&ctrl('l')), Outcome::Redraw);
+    }
+
+    #[test]
+    fn resize_changes_page_height_and_clamps() {
+        let mut p = pager(100, 10);
+        press(&mut p, &[ch('5'), ch('0'), ch('g')]);
+        assert_eq!(p.offset(), 49);
+        p.resize(20, None);
+        assert_eq!(p.offset(), 49);
+        assert_eq!(p.frame(80).rows.len(), 20);
+        p.resize(200, None);
+        assert_eq!(p.offset(), 0);
+        p.resize(0, None);
+        assert_eq!(p.frame(80).rows.len(), 1);
+    }
+
+    #[test]
+    fn resize_with_rerender_keeps_relative_position() {
+        let mut p = pager(100, 10);
+        press(&mut p, &[ch('5'), ch('1'), ch('g')]);
+        assert_eq!(p.offset(), 50);
+        let relaid: Vec<String> = (0..200).map(|i| i.to_string()).collect();
+        p.resize(10, Some(relaid));
+        assert_eq!(p.total(), 200);
+        assert_eq!(p.offset(), 100);
+        let relaid: Vec<String> = (0..50).map(|i| i.to_string()).collect();
+        p.resize(10, Some(relaid));
+        assert_eq!(p.offset(), 25);
+    }
+
+    #[test]
+    fn resize_at_end_stays_at_end() {
+        let mut p = pager(100, 10);
+        press(&mut p, &[ch('G')]);
+        let relaid: Vec<String> = (0..150).map(|i| i.to_string()).collect();
+        p.resize(12, Some(relaid));
+        assert_eq!(p.offset(), 138);
+        assert!(p.at_end());
     }
 
     #[test]

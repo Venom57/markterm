@@ -13,6 +13,7 @@ use crossterm::{
     terminal::{self, BeginSynchronizedUpdate, ClearType, EndSynchronizedUpdate},
 };
 use std::io::{self, Write};
+use std::time::Duration;
 
 use crate::style;
 use guard::TerminalGuard;
@@ -20,11 +21,13 @@ use state::{Frame, Outcome, Pager};
 
 /// Run the pager over `lines` and return the process exit status.
 ///
-/// `rerender` is accepted for resize support; it is not used yet.
+/// `rerender` re-renders the document at a new width; it is called after a
+/// terminal resize changes the width. Pass `None` when the width is fixed
+/// (e.g. `-w`), in which case a resize only changes the page height.
 pub fn run(
     lines: Vec<String>,
     filename: &str,
-    _rerender: Option<&dyn Fn(u16) -> Vec<String>>,
+    rerender: Option<&dyn Fn(u16) -> Vec<String>>,
 ) -> io::Result<i32> {
     let (width, height) = crate::terminal::size();
     let page_height = height.saturating_sub(1) as usize;
@@ -39,7 +42,13 @@ pub fn run(
     }
 
     let guard = TerminalGuard::enter()?;
-    let result = event_loop(&guard, Pager::new(lines, filename, page_height), width);
+    let mut session = Session {
+        pager: Pager::new(lines, filename, page_height),
+        width,
+        rendered_width: width,
+        rerender,
+    };
+    let result = session.event_loop(&guard);
     drop(guard);
     result
 }
@@ -68,25 +77,75 @@ fn print_all(lines: &[String]) -> io::Result<()> {
     out.flush()
 }
 
-fn event_loop(guard: &TerminalGuard, mut pager: Pager, width: u16) -> io::Result<i32> {
-    let mut stdout = io::stdout();
-    draw(&mut stdout, &pager.frame(width as usize), true)?;
+/// The interactive pager: pure state plus the cached terminal width.
+struct Session<'a> {
+    pager: Pager,
+    width: u16,
+    /// Width the current lines were rendered at.
+    rendered_width: u16,
+    rerender: Option<&'a dyn Fn(u16) -> Vec<String>>,
+}
 
-    loop {
-        let outcome = match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => pager.handle_key(&key),
-            _ => Outcome::Nothing,
-        };
-        match outcome {
-            Outcome::Nothing => {}
-            Outcome::Draw => draw(&mut stdout, &pager.frame(width as usize), false)?,
-            Outcome::Redraw => draw(&mut stdout, &pager.frame(width as usize), true)?,
-            Outcome::Suspend => {
-                guard.suspend()?;
-                draw(&mut stdout, &pager.frame(width as usize), true)?;
+impl Session<'_> {
+    fn event_loop(&mut self, guard: &TerminalGuard) -> io::Result<i32> {
+        let mut stdout = io::stdout();
+        self.draw(&mut stdout, true)?;
+
+        let mut pending: Option<Event> = None;
+        loop {
+            let ev = match pending.take() {
+                Some(ev) => ev,
+                None => event::read()?,
+            };
+            let outcome = match ev {
+                Event::Key(key) if key.kind == KeyEventKind::Press => self.pager.handle_key(&key),
+                Event::Resize(mut w, mut h) => {
+                    // Coalesce a burst of resize events into one re-render.
+                    while event::poll(Duration::ZERO)? {
+                        match event::read()? {
+                            Event::Resize(w2, h2) => (w, h) = (w2, h2),
+                            other => {
+                                pending = Some(other);
+                                break;
+                            }
+                        }
+                    }
+                    self.resize(w, h);
+                    Outcome::Redraw
+                }
+                _ => Outcome::Nothing,
+            };
+            match outcome {
+                Outcome::Nothing => {}
+                Outcome::Draw => self.draw(&mut stdout, false)?,
+                Outcome::Redraw => self.draw(&mut stdout, true)?,
+                Outcome::Suspend => {
+                    guard.suspend()?;
+                    // The terminal may have been resized while we were stopped.
+                    let (w, h) = crate::terminal::size();
+                    self.resize(w, h);
+                    self.draw(&mut stdout, true)?;
+                }
+                Outcome::Quit(code) => return Ok(code),
             }
-            Outcome::Quit(code) => return Ok(code),
         }
+    }
+
+    fn resize(&mut self, width: u16, height: u16) {
+        self.width = width;
+        let lines = match self.rerender {
+            Some(render) if width != self.rendered_width => {
+                self.rendered_width = width;
+                Some(render(width))
+            }
+            _ => None,
+        };
+        let page_height = height.saturating_sub(1) as usize;
+        self.pager.resize(page_height, lines);
+    }
+
+    fn draw(&self, out: &mut impl Write, clear_all: bool) -> io::Result<()> {
+        draw(out, &self.pager.frame(self.width as usize), clear_all)
     }
 }
 
