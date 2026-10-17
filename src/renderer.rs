@@ -30,6 +30,10 @@ struct RenderState {
     in_table_cell: bool,
     /// Inside a YAML front matter block (skipped).
     in_metadata: bool,
+    /// Buffered raw HTML of the HTML block being read.
+    html_block: Option<String>,
+    /// Inline buffer offset where the current image placeholder starts.
+    image_start: Option<usize>,
 }
 
 enum Container {
@@ -70,6 +74,8 @@ impl RenderState {
             table_rows: Vec::new(),
             in_table_cell: false,
             in_metadata: false,
+            html_block: None,
+            image_start: None,
         }
     }
 
@@ -264,6 +270,9 @@ impl RenderState {
         if self.strikethrough {
             codes.push(style::STRIKETHROUGH);
         }
+        if self.image_start.is_some() {
+            codes.push(style::DIM);
+        }
         if self.link.is_some() {
             codes.push(style::UNDERLINE);
         }
@@ -300,6 +309,53 @@ struct LinkState {
     show_url: bool,
     /// Byte offset in the inline buffer where the link text starts.
     text_start: usize,
+}
+
+/// True for `<br>`, `<br/>` and `<br />` (any case).
+fn is_br_tag(html: &str) -> bool {
+    let inner = html.trim();
+    let Some(inner) = inner.strip_prefix('<').and_then(|s| s.strip_suffix('>')) else {
+        return false;
+    };
+    let inner = inner.trim_end_matches('/').trim_end();
+    inner.eq_ignore_ascii_case("br")
+}
+
+/// Reduce raw HTML to its text: drop tags and comments, decode the common
+/// entities. A `<` not followed by a tag-like character is kept literally.
+fn strip_html(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(i) = rest.find('<') {
+        out.push_str(&rest[..i]);
+        rest = &rest[i..];
+        let tag_like = rest[1..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || matches!(c, '/' | '!' | '?'));
+        if !tag_like {
+            out.push('<');
+            rest = &rest[1..];
+            continue;
+        }
+        let end = if rest.starts_with("<!--") {
+            rest.find("-->").map(|j| j + 3)
+        } else {
+            rest.find('>').map(|j| j + 1)
+        };
+        match end {
+            Some(j) => rest = &rest[j..],
+            None => rest = "",
+        }
+    }
+    out.push_str(rest);
+    out.replace("&nbsp;", " ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
 }
 
 /// Remove ANSI escape sequences, leaving only visible text.
@@ -461,6 +517,22 @@ pub fn render(events: Vec<Event<'_>>, width: u16, use_color: bool, no_wrap: bool
             Event::HardBreak => handle_hard_break(&mut state),
             Event::Rule => handle_rule(&mut state),
             Event::TaskListMarker(checked) => handle_task_marker(&mut state, checked),
+            Event::Html(html) => {
+                if let Some(buf) = state.html_block.as_mut() {
+                    buf.push_str(&style::sanitize(&html));
+                }
+            }
+            Event::InlineHtml(html) => {
+                // Tags are dropped (their inner text arrives as Text events);
+                // only <br> has a visible effect.
+                if is_br_tag(&html) {
+                    if state.in_table_cell {
+                        state.inline_buf().push(' ');
+                    } else {
+                        handle_hard_break(&mut state);
+                    }
+                }
+            }
             Event::FootnoteReference(label) => {
                 let label = format!("[{}]", style::sanitize(&label));
                 let styled = style::styled(&label, &[style::DIM], state.use_color);
@@ -565,6 +637,16 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
                 text_start,
             });
         }
+        Tag::HtmlBlock => {
+            state.flush_wrapped();
+            state.html_block = Some(String::new());
+        }
+        Tag::Image { .. } => {
+            let start = state.inline_buf().len();
+            let label = style::styled("[image: ", &[style::DIM], state.use_color);
+            state.inline_buf().push_str(&label);
+            state.image_start = Some(start);
+        }
         Tag::Table(alignments) => {
             state.push_blank();
             state.table_alignments = alignments.clone();
@@ -637,6 +719,33 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
                     let url_display =
                         style::styled(&format!(" ({})", link.url), &[style::DIM], state.use_color);
                     state.inline_buf().push_str(&url_display);
+                }
+            }
+        }
+        TagEnd::HtmlBlock => {
+            let html = state.html_block.take().unwrap_or_default();
+            let text = strip_html(&html);
+            let words: Vec<String> = text
+                .split_whitespace()
+                .map(|w| style::styled(w, &[style::DIM], state.use_color))
+                .collect();
+            if !words.is_empty() {
+                state.push_blank();
+                state.current_line = words.join(" ");
+                state.flush_wrapped();
+            }
+        }
+        TagEnd::Image => {
+            if let Some(start) = state.image_start.take() {
+                let use_color = state.use_color;
+                let buf = state.inline_buf();
+                let alt = buf.get(start..).map(strip_ansi).unwrap_or_default();
+                if alt.trim_end() == "[image:" {
+                    // No alt text.
+                    buf.truncate(start);
+                    buf.push_str(&style::styled("[image]", &[style::DIM], use_color));
+                } else {
+                    buf.push_str(&style::styled("]", &[style::DIM], use_color));
                 }
             }
         }
@@ -1327,6 +1436,42 @@ mod tests {
         let color = render(parser::parse("a[^n]\n\n[^n]: b"), 80, true, false);
         assert!(color[0].contains(&format!("{}[n]{}", style::DIM, style::RESET)));
         assert!(color[2].starts_with(&format!("{}[n]: {}", style::DIM, style::RESET)));
+    }
+
+    #[test]
+    fn test_inline_html() {
+        assert_eq!(
+            plain("a<br>b <BR/> c <kbd>Ctrl</kbd>+<kbd>C</kbd>", 80),
+            vec!["a", "b", "c Ctrl+C"]
+        );
+    }
+
+    #[test]
+    fn test_html_block_text_kept() {
+        assert_eq!(
+            plain(
+                "<details>\n<summary>Click &amp; see</summary>\n\nbody\n</details>\n\n<!-- hidden -->",
+                80
+            ),
+            vec!["Click & see", "", "body"]
+        );
+        assert_eq!(strip_html("a < b <i>c</i>"), "a < b c");
+        let color = render(parser::parse("<p>x y</p>"), 80, true, false);
+        assert_eq!(
+            color,
+            vec![format!("{d}x{r} {d}y{r}", d = style::DIM, r = style::RESET)]
+        );
+    }
+
+    #[test]
+    fn test_images() {
+        assert_eq!(
+            plain("![Alt text](a.png) ![](b.png)", 80),
+            vec!["[image: Alt text] [image]"]
+        );
+        let color = render(parser::parse("![a](a.png)"), 80, true, false);
+        let (d, r) = (style::DIM, style::RESET);
+        assert_eq!(color, vec![format!("{d}[image: {r}{d}a{r}{d}]{r}")]);
     }
 
     #[test]

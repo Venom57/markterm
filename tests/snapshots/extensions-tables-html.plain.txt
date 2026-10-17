@@ -18,7 +18,9 @@ Text with footnote[1].
 
 [1]: The footnote body.
 
-Alt text here
+[image: Alt text here]
+
+Click
 
 Hidden body
 

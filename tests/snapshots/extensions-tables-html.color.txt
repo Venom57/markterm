@@ -18,7 +18,9 @@ Text with footnote␛[2m[1]␛[0m.
 
 ␛[2m[1]: ␛[0mThe footnote body.
 
-Alt text here
+␛[2m[image: ␛[0m␛[2mAlt text here␛[0m␛[2m]␛[0m
+
+␛[2mClick␛[0m
 
 Hidden body
 
