@@ -74,6 +74,28 @@ Colour and text attributes are emitted only when all of these hold:
 So `markterm doc.md > out.txt` produces plain text, while
 `markterm --color always doc.md | less -R` keeps the formatting.
 
+### Themes
+
+| Theme | Description |
+|-------|-------------|
+| `auto` | Picks `dark` or `light` from the terminal background (`COLORFGBG`, then an OSC 11 query); falls back to `dark` when it can't tell or when output is piped |
+| `dark` | Bright white underlined H1, bright cyan H2, bright yellow H3, dark-grey inline-code background, cyan list markers |
+| `light` | For white backgrounds: underlined H1 in the default colour, blue H2, magenta H3, light-grey inline-code background, blue list markers (no bright white or yellow) |
+| `none` | No colours or text attributes (same as `--color never`) |
+
+Without colour (`--theme none`, `--color never`, `NO_COLOR`, or piped output)
+the document keeps its structure in plain text: H1 headings are underlined
+with `═` and H2 headings with `─` (as wide as the heading), inline code keeps
+its backticks, and quotes, code blocks and tables use the same `│`/box-drawing
+borders as in colour. Bold and italic text is shown as plain text.
+
+Italic text is shown underlined on terminals known not to support italics
+(`TERM` of `linux`, `vt100`, `vt220` and other `vt*`, `dumb`, `ansi`, `cons25`).
+
+Wrapping and table layout measure display width, so CJK text (two columns per
+character), emoji and combining marks line up; CJK text may break between any
+two characters, and words or URLs longer than a line are broken to fit.
+
 Input that is not valid UTF-8 is displayed with replacement characters (`�`)
 rather than rejected.
 

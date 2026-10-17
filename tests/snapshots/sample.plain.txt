@@ -1,8 +1,10 @@
 markterm Sample Document
+════════════════════════
 
 This is a sample markdown file to test `markterm` rendering capabilities.
 
 Text Formatting
+───────────────
 
 Here is some bold text, some italic text, and some strikethrough text. You can
 also combine bold and italic together.
@@ -10,29 +12,32 @@ also combine bold and italic together.
 Inline `code spans` render with a distinct background.
 
 Links
+─────
 
 Check out Rust (https://www.rust-lang.org/) for more information.
 
 Code Blocks
+───────────
 
   ╭─ rust 
-  | fn main() {
-  |     println!("Hello, world!");
-  |     let x = 42;
-  |     for i in 0..x {
-  |         println!("{}", i);
-  |     }
-  | }
+  │ fn main() {
+  │     println!("Hello, world!");
+  │     let x = 42;
+  │     for i in 0..x {
+  │         println!("{}", i);
+  │     }
+  │ }
   ╰───
 
 Here's a plain code block:
 
   ╭───
-  | $ cargo build --release
-  | $ ./target/release/markterm README.md
+  │ $ cargo build --release
+  │ $ ./target/release/markterm README.md
   ╰───
 
 Lists
+─────
 
 Unordered
 
@@ -57,24 +62,27 @@ Task List
   [ ] Ship it
 
 Block Quotes
+────────────
 
-  | "The best way to predict the future is to invent it." — Alan Kay
+  │ "The best way to predict the future is to invent it." — Alan Kay
 
-  | Nested block quotes contain multiple lines of wisdom.
+  │ Nested block quotes contain multiple lines of wisdom.
 
 Tables
+──────
 
   ┌─────────────┬────────┬──────────┐
-  | Feature     | Status | Priority |
+  │ Feature     │ Status │ Priority │
   ├─────────────┼────────┼──────────┤
-  | Headings    | Done   | High     |
-  | Bold/Italic | Done   | High     |
-  | Code blocks | Done   | High     |
-  | Tables      | Done   | Medium   |
-  | Pager       | Done   | High     |
+  │ Headings    │ Done   │ High     │
+  │ Bold/Italic │ Done   │ High     │
+  │ Code blocks │ Done   │ High     │
+  │ Tables      │ Done   │ Medium   │
+  │ Pager       │ Done   │ High     │
   └─────────────┴────────┴──────────┘
 
 Horizontal Rules
+────────────────
 
 Above the rule.
 
@@ -83,6 +91,7 @@ Above the rule.
 Below the rule.
 
 Long Paragraph for Word Wrapping
+────────────────────────────────
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
 incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
@@ -92,5 +101,6 @@ eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt
 in culpa qui officia deserunt mollit anim id est laborum.
 
 The End
+───────
 
 That's all folks! Press `q` to quit.

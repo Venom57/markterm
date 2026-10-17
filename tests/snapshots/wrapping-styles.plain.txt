@@ -7,9 +7,9 @@ bold text that spans many words and
 must wrap across lines to see style
 leakage behaviour
 
-  | bold quote that is long enough to
-  | wrap across multiple lines inside
-  | the blockquote border ok
+  │ bold quote that is long enough to
+  │ wrap across multiple lines inside
+  │ the blockquote border ok
 
 Visit
 https://example.com/a/very/long/path/t

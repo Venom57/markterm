@@ -3,6 +3,7 @@ mod parser;
 mod renderer;
 mod style;
 mod terminal;
+mod theme;
 
 use clap::{CommandFactory, Parser, ValueEnum};
 use std::ffi::OsString;
@@ -68,9 +69,7 @@ struct Cli {
 /// Everything the renderer needs besides the width, so the pager can
 /// re-render at a new width after a terminal resize.
 struct RenderOptions {
-    /// Selected theme. Only `none` has an effect today; dark/light palettes
-    /// will be read from here once the renderer supports them (#37).
-    #[allow(dead_code)]
+    /// Selected theme, with `auto` normally resolved to dark or light.
     theme: Theme,
     use_color: bool,
     no_wrap: bool,
@@ -79,7 +78,20 @@ struct RenderOptions {
 impl RenderOptions {
     fn render(&self, content: &str, width: u16) -> Vec<String> {
         let events = parser::parse(content);
-        renderer::render(events, width, self.use_color, self.no_wrap)
+        renderer::render(events, width, &self.palette(), self.no_wrap)
+    }
+
+    /// The renderer's styles. `auto` left unresolved (detection skipped)
+    /// uses the dark palette.
+    fn palette(&self) -> theme::Theme {
+        if !self.use_color {
+            return theme::Theme::none();
+        }
+        let italic = theme::supports_italic(std::env::var("TERM").ok().as_deref());
+        match self.theme {
+            Theme::Light => theme::Theme::light(italic),
+            Theme::Auto | Theme::Dark | Theme::None => theme::Theme::dark(italic),
+        }
     }
 }
 

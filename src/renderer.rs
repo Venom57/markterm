@@ -8,24 +8,11 @@
 
 use std::collections::VecDeque;
 
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, LinkType, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 use unicode_width::UnicodeWidthChar;
 
-use crate::style::{self, Color, Line, Span, Style, StyledWriter};
-
-// Element styles (dark palette).
-const H1: Style = Style::PLAIN.bold().underline().fg(Color::Ansi(15));
-const H2: Style = Style::PLAIN.bold().fg(Color::Ansi(14));
-const H3: Style = Style::PLAIN.bold().fg(Color::Ansi(11));
-const H4: Style = Style::PLAIN.bold();
-const BOLD: Style = Style::PLAIN.bold();
-const ITALIC: Style = Style::PLAIN.italic();
-const STRIKE: Style = Style::PLAIN.strike();
-const DIM: Style = Style::PLAIN.dim();
-const LINK: Style = Style::PLAIN.underline();
-const CODE: Style = Style::PLAIN.bg(Color::Indexed(236));
-const MARKER: Style = Style::PLAIN.fg(Color::Ansi(6));
-const TASK_DONE: Style = Style::PLAIN.bold().fg(Color::Ansi(2));
+use crate::style::{self, Line, Span, Style, StyledWriter};
+use crate::theme::Theme;
 
 /// A piece of inline content in one style.
 struct Run {
@@ -37,7 +24,7 @@ struct Run {
 }
 
 struct RenderState {
-    use_color: bool,
+    theme: Theme,
     no_wrap: bool,
     width: usize,
     lines: Vec<String>,
@@ -108,9 +95,9 @@ struct ImageState {
 }
 
 impl RenderState {
-    fn new(width: u16, use_color: bool, no_wrap: bool) -> Self {
+    fn new(width: u16, theme: &Theme, no_wrap: bool) -> Self {
         Self {
-            use_color,
+            theme: *theme,
             no_wrap,
             width: width.saturating_sub(2) as usize, // margin
             lines: Vec::new(),
@@ -138,7 +125,7 @@ impl RenderState {
     /// Emit a finished line, prefixed with the current container prefix.
     /// The first line emitted in a list item carries the item's marker.
     fn emit(&mut self, content: Line) {
-        let mut w = StyledWriter::new(self.use_color);
+        let mut w = StyledWriter::new(self.theme.color);
         self.write_prefix(&mut w, self.containers.len(), true, false);
         for c in &mut self.containers {
             if let Container::Item { pending, .. } = c {
@@ -164,7 +151,7 @@ impl RenderState {
     fn push_blank(&mut self) {
         self.flush_wrapped();
         if !self.last_blank {
-            let mut w = StyledWriter::new(self.use_color);
+            let mut w = StyledWriter::new(self.theme.color);
             if let Some(last_quote) = self
                 .containers
                 .iter()
@@ -177,12 +164,11 @@ impl RenderState {
         }
     }
 
-    fn quote_bar(&self, trailing_space: bool) -> &'static str {
-        match (self.use_color, trailing_space) {
-            (true, true) => "│ ",
-            (true, false) => "│",
-            (false, true) => "| ",
-            (false, false) => "|",
+    fn quote_bar(trailing_space: bool) -> &'static str {
+        if trailing_space {
+            "│ "
+        } else {
+            "│"
         }
     }
 
@@ -199,7 +185,10 @@ impl RenderState {
                     if i == 0 {
                         w.pad(2);
                     }
-                    w.push(DIM, self.quote_bar(!(bare && i + 1 == len)));
+                    w.push(
+                        self.theme.quote_border,
+                        Self::quote_bar(!(bare && i + 1 == len)),
+                    );
                 }
                 Container::List { .. } => {
                     if !in_item {
@@ -275,27 +264,25 @@ impl RenderState {
 
     /// The style of inline text at the current position.
     fn current_style(&self) -> Style {
+        let t = &self.theme;
         let mut s = match self.in_heading {
-            Some(1) => H1,
-            Some(2) => H2,
-            Some(3) => H3,
-            Some(_) => H4,
+            Some(level) => t.heading[usize::from(level.clamp(1, 6)) - 1],
             None => Style::PLAIN,
         };
         if self.bold {
-            s = s.patch(BOLD);
+            s = s.patch(t.bold);
         }
         if self.italic {
-            s = s.patch(ITALIC);
+            s = s.patch(t.italic);
         }
         if self.strikethrough {
-            s = s.patch(STRIKE);
+            s = s.patch(t.strike);
         }
         if self.image.is_some() {
-            s = s.patch(DIM);
+            s = s.patch(t.image);
         }
         if self.link.is_some() {
-            s = s.patch(LINK);
+            s = s.patch(t.link_text);
         }
         s
     }
@@ -710,10 +697,10 @@ fn buffer_ordered_list<'a>(
 pub fn render<'a>(
     events: impl IntoIterator<Item = Event<'a>>,
     width: u16,
-    use_color: bool,
+    theme: &Theme,
     no_wrap: bool,
 ) -> Vec<String> {
-    let mut state = RenderState::new(width, use_color, no_wrap);
+    let mut state = RenderState::new(width, theme, no_wrap);
     let mut events = events.into_iter();
     let mut replay = VecDeque::new();
 
@@ -772,7 +759,7 @@ fn handle_event(state: &mut RenderState, event: Event<'_>) {
         }
         Event::FootnoteReference(label) => {
             let label = format!("[{}]", style::sanitize(&label));
-            state.push_run(DIM, label, false);
+            state.push_run(state.theme.footnote, label, false);
         }
         _ => {}
     }
@@ -800,7 +787,7 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
                 _ => "  ╭───".to_string(),
             };
             let mut line = Line::new();
-            line.push(DIM, &label);
+            line.push(state.theme.code_label, &label);
             let line = line.truncate(state.available());
             state.emit(line);
             state.code_block = Some(String::new());
@@ -825,25 +812,24 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
         Tag::Item => {
             state.flush_wrapped();
             let depth = state.list_depth().saturating_sub(1);
-            let marker = match state.containers.last_mut() {
+            let (marker, style) = match state.containers.last_mut() {
                 Some(Container::List {
                     next: Some(n),
                     num_width,
                 }) => {
                     let s = format!("{:>w$}. ", n, w = *num_width);
                     *n = n.saturating_add(1);
-                    s
+                    (s, state.theme.ordered_marker)
                 }
-                _ => match depth {
-                    0 => "• ".to_string(),
-                    1 => "◦ ".to_string(),
-                    _ => "▪ ".to_string(),
-                },
+                _ => {
+                    let glyph = ["• ", "◦ ", "▪ "][depth.min(2)];
+                    (glyph.to_string(), state.theme.bullets[depth.min(2)])
+                }
             };
             let width = style::display_width(&marker);
             state.containers.push(Container::Item {
                 marker: Span {
-                    style: MARKER,
+                    style,
                     text: marker,
                 },
                 width,
@@ -858,7 +844,7 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             let width = style::display_width(&marker);
             state.containers.push(Container::Item {
                 marker: Span {
-                    style: DIM,
+                    style: state.theme.footnote,
                     text: marker,
                 },
                 width,
@@ -891,7 +877,7 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
         }
         Tag::Image { .. } => {
             let start = state.inline_buf().len();
-            state.push_run(DIM, "[image: ".into(), false);
+            state.push_run(state.theme.image, "[image: ".into(), false);
             state.image = Some(ImageState {
                 start,
                 has_alt: false,
@@ -915,9 +901,19 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
 
 fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
     match tag {
-        TagEnd::Heading(_level) => {
-            state.flush_wrapped();
+        TagEnd::Heading(level) => {
+            let widest = state.flush_wrapped();
             state.in_heading = None;
+            // Without colour, H1/H2 keep their weight with an underline
+            // as wide as the heading text.
+            let underline = match level {
+                HeadingLevel::H1 => "═",
+                HeadingLevel::H2 => "─",
+                _ => "",
+            };
+            if !state.theme.color && widest > 0 && !underline.is_empty() {
+                state.emit_text(Style::PLAIN, &underline.repeat(widest));
+            }
         }
         TagEnd::Paragraph => {
             state.flush_wrapped();
@@ -961,7 +957,7 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
                     || link.url.strip_prefix("mailto:") == Some(text)
                     || link.url.is_empty();
                 if link.show_url && !redundant {
-                    state.push_run(DIM, format!(" ({})", link.url), false);
+                    state.push_run(state.theme.link_url, format!(" ({})", link.url), false);
                 }
             }
         }
@@ -970,23 +966,24 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
             let text = strip_html(&html);
             if !text.trim().is_empty() {
                 state.push_blank();
-                state.push_run(DIM, text, false);
+                state.push_run(state.theme.html, text, false);
                 state.flush_wrapped();
             }
         }
         TagEnd::Image => {
             if let Some(image) = state.image.take() {
+                let style = state.theme.image;
                 let buf = state.inline_buf();
                 if image.has_alt {
                     buf.push(Run {
-                        style: DIM,
+                        style,
                         text: "]".into(),
                         atomic: false,
                     });
                 } else {
                     buf.truncate(image.start);
                     buf.push(Run {
-                        style: DIM,
+                        style,
                         text: "[image]".into(),
                         atomic: false,
                     });
@@ -1028,12 +1025,12 @@ fn handle_code(state: &mut RenderState, code: &str) {
     if let Some(image) = state.image.as_mut() {
         image.has_alt |= !code.trim().is_empty();
     }
-    let text = if state.use_color {
+    let text = if state.theme.color {
         format!(" {} ", code)
     } else {
         format!("`{}`", code)
     };
-    let style = state.current_style().patch(CODE);
+    let style = state.current_style().patch(state.theme.inline_code);
     state.push_run(style, text, true);
 }
 
@@ -1063,7 +1060,7 @@ fn expand_tabs(line: &str) -> String {
 /// Emit a buffered code block: one row per source line, tabs expanded,
 /// over-wide lines truncated with `…` (code is never word-wrapped).
 fn render_code_block(state: &mut RenderState, code: &str) {
-    let border = if state.use_color { "  │ " } else { "  | " };
+    let border = state.theme.code_border;
     let available = state.available().saturating_sub(4);
     for src in code.lines() {
         let mut text = Line::new();
@@ -1072,11 +1069,11 @@ fn render_code_block(state: &mut RenderState, code: &str) {
             text = text.truncate(available);
         }
         let mut line = Line::new();
-        line.push(DIM, border);
+        line.push(border, "  │ ");
         line.append(text);
         state.emit(line);
     }
-    state.emit_text(DIM, "  ╰───");
+    state.emit_text(border, "  ╰───");
 }
 
 fn handle_hard_break(state: &mut RenderState) {
@@ -1086,15 +1083,15 @@ fn handle_hard_break(state: &mut RenderState) {
 fn handle_rule(state: &mut RenderState) {
     state.push_blank();
     let rule = "─".repeat(state.available());
-    state.emit_text(DIM, &rule);
+    state.emit_text(state.theme.rule, &rule);
     state.push_blank();
 }
 
 fn handle_task_marker(state: &mut RenderState, checked: bool) {
     let (text, style) = if checked {
-        ("[✓]", TASK_DONE)
+        ("[✓]", state.theme.task_done)
     } else {
-        ("[ ]", DIM)
+        ("[ ]", state.theme.task_todo)
     };
     // The checkbox replaces the item's bullet when it hasn't been printed.
     if let Some(Container::Item {
@@ -1118,10 +1115,10 @@ fn handle_task_marker(state: &mut RenderState, checked: bool) {
 // Tables
 // ---------------------------------------------------------------------------
 
-/// Bold every run of a header cell.
-fn embolden(runs: &mut [Run]) {
+/// Apply the table header style to every run of a header cell.
+fn embolden(runs: &mut [Run], header: Style) {
     for r in runs {
-        r.style = r.style.patch(BOLD);
+        r.style = r.style.patch(header);
     }
 }
 
@@ -1129,7 +1126,9 @@ fn render_table(state: &mut RenderState) {
     let mut rows = std::mem::take(&mut state.table_rows);
     let alignments = std::mem::take(&mut state.table_alignments);
     if let Some(header) = rows.first_mut() {
-        header.iter_mut().for_each(|c| embolden(c));
+        header
+            .iter_mut()
+            .for_each(|c| embolden(c, state.theme.table_header));
     }
 
     let num_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
@@ -1168,10 +1167,10 @@ fn render_table(state: &mut RenderState) {
         }
         let mut line = Line::new();
         line.pad(Style::PLAIN, 2);
-        line.push(DIM, &rule);
+        line.push(state.theme.table_border, &rule);
         state.emit(line);
     };
-    let bar = if state.use_color { "│" } else { "|" };
+    let (bar, border) = ("│", state.theme.table_border);
 
     draw_separator(state, "┌", "┬", "┐");
     for (row_idx, row) in rows.iter().enumerate() {
@@ -1186,7 +1185,7 @@ fn render_table(state: &mut RenderState) {
         for line_idx in 0..height {
             let mut line = Line::new();
             line.pad(Style::PLAIN, 2);
-            line.push(DIM, bar);
+            line.push(border, bar);
             for (i, cell_lines) in wrapped.iter_mut().enumerate() {
                 let content = cell_lines
                     .get_mut(line_idx)
@@ -1201,7 +1200,7 @@ fn render_table(state: &mut RenderState) {
                 line.pad(Style::PLAIN, 1 + left);
                 line.append(content);
                 line.pad(Style::PLAIN, right + 1);
-                line.push(DIM, bar);
+                line.push(border, bar);
             }
             state.emit(line);
         }
@@ -1260,7 +1259,11 @@ fn fit_columns(widths: &mut [usize], max_content: usize) {
 /// Fallback for tables too wide for the terminal: each body row becomes a
 /// block of `header: value` lines, with rows separated by a dim rule.
 fn render_table_vertical(state: &mut RenderState, rows: Vec<Vec<Vec<Run>>>, available: usize) {
-    let no_wrap = state.no_wrap;
+    let (no_wrap, border, header_style) = (
+        state.no_wrap,
+        state.theme.table_border,
+        state.theme.table_header,
+    );
     let mut rows = rows.into_iter();
     let Some(headers) = rows.next() else {
         return;
@@ -1273,7 +1276,7 @@ fn render_table_vertical(state: &mut RenderState, rows: Vec<Vec<Vec<Run>>>, avai
         .into_iter()
         .map(|mut h| {
             h.push(Run {
-                style: BOLD,
+                style: header_style,
                 text: ":".into(),
                 atomic: false,
             });
@@ -1288,14 +1291,14 @@ fn render_table_vertical(state: &mut RenderState, rows: Vec<Vec<Vec<Run>>>, avai
         .unwrap_or(0)
         .min(available / 2);
 
-    state.emit_text(DIM, &rule);
+    state.emit_text(border, &rule);
     if body.is_empty() {
         for (label, _) in &labels {
             for line in wrap_runs(label, available, no_wrap) {
                 state.emit(line);
             }
         }
-        state.emit_text(DIM, &rule);
+        state.emit_text(border, &rule);
         return;
     }
     for row in &body {
@@ -1332,7 +1335,7 @@ fn render_table_vertical(state: &mut RenderState, rows: Vec<Vec<Vec<Run>>>, avai
                 }
             }
         }
-        state.emit_text(DIM, &rule);
+        state.emit_text(border, &rule);
     }
 }
 

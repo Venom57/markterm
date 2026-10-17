@@ -1,16 +1,18 @@
 H1 `code` Title
+═══════════════
 
 H2
+──
 
 H3
 
   ┌──────────┬─────────────────────────────────────────┬─────────────────────┐
-  | Left     |                 Center                  |               Right |
+  │ Left     │                 Center                  │               Right │
   ├──────────┼─────────────────────────────────────────┼─────────────────────┤
-  | bold     |                 `code`                  | link (https://x.io) |
-  | a        | https://example.com/averyveryverylongur |                   1 |
-  |          |           lwithoutspaces/abc            |                     |
-  | 漢字漢字 |                    b                    |                   2 |
+  │ bold     │                 `code`                  │ link (https://x.io) │
+  │ a        │ https://example.com/averyveryverylongur │                   1 │
+  │          │           lwithoutspaces/abc            │                     │
+  │ 漢字漢字 │                    b                    │                   2 │
   └──────────┴─────────────────────────────────────────┴─────────────────────┘
 
 After table paragraph.

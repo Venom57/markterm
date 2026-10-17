@@ -1,5 +1,6 @@
 Averyveryverylongheadingword
 withoutanyspaces
+════════════════════════════
 
 Visit
 https://example.com/a/very/l
@@ -15,10 +16,10 @@ all/ok please.
       pialidocious_extra_lon
       g_identifier
 
-  | Quote
-  | https://example.com/quot
-  | ed/long/url/that/must/br
-  | eak/inside/the/border
+  │ Quote
+  │ https://example.com/quot
+  │ ed/long/url/that/must/br
+  │ eak/inside/the/border
 
 See the docs
 (https://example.com/docs/wi
@@ -34,13 +35,13 @@ text that continues after
 the code span ok.
 
   ┌──────┬─────────────────┐
-  | Col  | Link            |
+  │ Col  │ Link            │
   ├──────┼─────────────────┤
-  | a    | https://example |
-  |      | .com/averyveryv |
-  |      | erylongurlwitho |
-  |      | utspaces/abc    |
-  | bold | `inline_code_th |
-  |      | at_is_too_long_ |
-  |      | for_the_cell`   |
+  │ a    │ https://example │
+  │      │ .com/averyveryv │
+  │      │ erylongurlwitho │
+  │      │ utspaces/abc    │
+  │ bold │ `inline_code_th │
+  │      │ at_is_too_long_ │
+  │      │ for_the_cell`   │
   └──────┴─────────────────┘

@@ -1,7 +1,8 @@
 //! Exact-output snapshot tests for every fixture in `tests/fixtures/`.
 //!
-//! Each fixture is rendered in plain (`use_color = false`) and colour mode and
-//! compared against `tests/snapshots/<name>.plain.txt` / `<name>.color.txt`.
+//! Each fixture is rendered with the `none` and `dark` themes and compared
+//! against `tests/snapshots/<name>.plain.txt` / `<name>.color.txt`;
+//! `sample.md` also has a `light` snapshot.
 //! In colour snapshots, control characters (including ESC) are replaced by
 //! their Unicode "control picture" (ESC → `␛`) so diffs stay readable.
 //!
@@ -12,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use super::render;
 use crate::parser;
+use crate::theme::Theme;
 
 /// Per-fixture render settings: (width, no_wrap).
 fn settings_for(name: &str) -> (u16, bool) {
@@ -28,9 +30,9 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn render_fixture(content: &str, width: u16, use_color: bool, no_wrap: bool) -> String {
+fn render_fixture(content: &str, width: u16, theme: &Theme, no_wrap: bool) -> String {
     let events = parser::parse(content);
-    let lines = render(events, width, use_color, no_wrap);
+    let lines = render(events, width, theme, no_wrap);
     let mut out = String::new();
     for line in lines {
         out.push_str(&line);
@@ -146,8 +148,9 @@ fn fixtures_satisfy_line_invariants() {
         let (snap_width, no_wrap) = settings_for(&name);
         for width in [snap_width, 24, 33, 50, 80] {
             for nw in [no_wrap, !no_wrap] {
-                for color in [false, true] {
-                    let lines = render(parser::parse(&content), width, color, nw);
+                for theme in [Theme::none(), Theme::dark(true), Theme::light(false)] {
+                    let color = theme.color;
+                    let lines = render(parser::parse(&content), width, &theme, nw);
                     for (i, line) in lines.iter().enumerate() {
                         let w = crate::style::display_width(line);
                         if w > width as usize {
@@ -194,10 +197,21 @@ fn fixtures_match_snapshots() {
         let content = String::from_utf8_lossy(&bytes);
         let (width, no_wrap) = settings_for(&name);
 
-        let plain = render_fixture(&content, width, false, no_wrap);
-        let color = visible_controls(&render_fixture(&content, width, true, no_wrap));
+        let plain = render_fixture(&content, width, &Theme::none(), no_wrap);
+        let color = visible_controls(&render_fixture(
+            &content,
+            width,
+            &Theme::dark(true),
+            no_wrap,
+        ));
+        let mut outputs = vec![("plain", plain), ("color", color)];
+        if name == "sample" {
+            // The light palette (with the underline italic fallback).
+            let light = render_fixture(&content, width, &Theme::light(false), no_wrap);
+            outputs.push(("light", visible_controls(&light)));
+        }
 
-        for (suffix, actual) in [("plain", plain), ("color", color)] {
+        for (suffix, actual) in outputs {
             let snap = snapshots.join(format!("{}.{}.txt", name, suffix));
             if let Err(e) = check_snapshot(&snap, &actual, update) {
                 failures.push(e);

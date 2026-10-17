@@ -1,7 +1,7 @@
   • item
 
       ╭───
-      | code in list with a really lo…
+      │ code in list with a really lo…
       ╰───
 
    8. eight

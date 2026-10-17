@@ -6,14 +6,14 @@ use crate::parser;
 #[test]
 fn test_heading_renders() {
     let events = parser::parse("# Hello World");
-    let lines = render(events, 80, false, false);
+    let lines = render(events, 80, &Theme::none(), false);
     assert!(lines.iter().any(|l| l.contains("Hello World")));
 }
 
 #[test]
 fn test_bold_renders() {
     let events = parser::parse("**bold text**");
-    let lines = render(events, 80, true, false);
+    let lines = render(events, 80, &Theme::dark(true), false);
     let joined = lines.join("");
     assert!(joined.contains("bold text"));
 }
@@ -21,7 +21,7 @@ fn test_bold_renders() {
 #[test]
 fn test_inline_formatting_stays_on_one_line() {
     let events = parser::parse("This is **bold** and *italic* text.");
-    let lines = render(events, 80, false, false);
+    let lines = render(events, 80, &Theme::none(), false);
     let content_lines: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
     assert_eq!(
         content_lines.len(),
@@ -36,7 +36,7 @@ fn test_inline_formatting_stays_on_one_line() {
 #[test]
 fn test_list_renders() {
     let events = parser::parse("- item one\n- item two");
-    let lines = render(events, 80, false, false);
+    let lines = render(events, 80, &Theme::none(), false);
     assert!(lines.iter().any(|l| l.contains("item one")));
     assert!(lines.iter().any(|l| l.contains("item two")));
 }
@@ -44,21 +44,21 @@ fn test_list_renders() {
 #[test]
 fn test_code_block_renders() {
     let events = parser::parse("```\nlet x = 1;\n```");
-    let lines = render(events, 80, false, false);
+    let lines = render(events, 80, &Theme::none(), false);
     assert!(lines.iter().any(|l| l.contains("let x = 1;")));
 }
 
 #[test]
 fn test_horizontal_rule() {
     let events = parser::parse("---");
-    let lines = render(events, 40, false, false);
+    let lines = render(events, 40, &Theme::none(), false);
     assert!(lines.iter().any(|l| l.contains("─")));
 }
 
 #[test]
 fn test_word_wrap() {
     let events = parser::parse("This is a very long line that should be wrapped when the terminal width is narrow enough to require it.");
-    let lines = render(events, 40, false, false);
+    let lines = render(events, 40, &Theme::none(), false);
     let content_lines: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
     assert!(content_lines.len() > 1, "Long text should wrap");
     for line in &content_lines {
@@ -74,7 +74,7 @@ fn test_no_wrap_truncates_with_ellipsis() {
     let events = parser::parse(
         "This is a very long line that should be truncated when no-wrap mode is enabled.",
     );
-    let lines = render(events, 30, false, true);
+    let lines = render(events, 30, &Theme::none(), true);
     let content_lines: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
     assert_eq!(content_lines.len(), 1, "No-wrap should produce one line");
     assert!(
@@ -91,7 +91,7 @@ fn test_no_wrap_truncates_with_ellipsis() {
 fn test_table_respects_terminal_width() {
     let md = "| Short | This column has a very long text that should cause wrapping when the terminal is narrow enough |\n|---|---|\n| a | More long text that definitely exceeds the terminal width for testing purposes |";
     let events = parser::parse(md);
-    let lines = render(events, 50, false, false);
+    let lines = render(events, 50, &Theme::none(), false);
     for line in &lines {
         assert!(
             style::display_width(line) <= 50,
@@ -106,9 +106,9 @@ fn test_table_respects_terminal_width() {
 fn test_table_multiline_cells() {
     let md = "| A | B |\n|---|---|\n| short | This is a long cell that should definitely wrap to multiple lines within the table row |\n";
     let events = parser::parse(md);
-    let lines = render(events, 40, false, false);
+    let lines = render(events, 40, &Theme::none(), false);
     // Count data row lines (lines with | between header separator and bottom border)
-    let table_lines: Vec<&String> = lines.iter().filter(|l| l.contains('|')).collect();
+    let table_lines: Vec<&String> = lines.iter().filter(|l| l.contains('│')).collect();
     // Should have: header + at least 2 lines for the data row (since cell wraps)
     assert!(
         table_lines.len() > 3,
@@ -139,11 +139,11 @@ fn test_wrap_cell_text_wraps() {
 }
 
 fn plain(md: &str, width: u16) -> Vec<String> {
-    render(parser::parse(md), width, false, false)
+    render(parser::parse(md), width, &Theme::none(), false)
 }
 
 fn color(md: &str, width: u16) -> Vec<String> {
-    render(parser::parse(md), width, true, false)
+    render(parser::parse(md), width, &Theme::dark(true), false)
 }
 
 /// Wrap one unstyled run and return the plain text of each line.
@@ -283,12 +283,17 @@ fn test_nested_list_parent_at_parent_indent() {
 
 #[test]
 fn test_list_in_quote_single_border() {
-    assert_eq!(plain("> - item", 80), vec!["  |   • item"]);
+    assert_eq!(plain("> - item", 80), vec!["  │   • item"]);
 }
 
 #[test]
 fn test_no_wrap_list_indent_not_doubled() {
-    let lines = render(parser::parse("- item\n  - nested"), 80, false, true);
+    let lines = render(
+        parser::parse("- item\n  - nested"),
+        80,
+        &Theme::none(),
+        true,
+    );
     assert_eq!(lines, vec!["  • item", "    ◦ nested"]);
 }
 
@@ -296,7 +301,7 @@ fn test_no_wrap_list_indent_not_doubled() {
 fn test_nested_blockquotes() {
     assert_eq!(
         plain("> outer\n>\n> > inner\n>\n> back", 80),
-        vec!["  | outer", "  |", "  | | inner", "  |", "  | back"]
+        vec!["  │ outer", "  │", "  │ │ inner", "  │", "  │ back"]
     );
 }
 
@@ -312,7 +317,7 @@ fn test_wrapped_list_item_hanging_indent() {
 fn test_code_block_no_trailing_or_doubled_blank_rows() {
     assert_eq!(
         plain("```\na\nb\n```", 80),
-        vec!["  ╭───", "  | a", "  | b", "  ╰───"]
+        vec!["  ╭───", "  │ a", "  │ b", "  ╰───"]
     );
     // Inside a list item (one Text event per line).
     assert_eq!(
@@ -321,8 +326,8 @@ fn test_code_block_no_trailing_or_doubled_blank_rows() {
             "  • x",
             "",
             "      ╭───",
-            "      | a",
-            "      | b",
+            "      │ a",
+            "      │ b",
             "      ╰───"
         ]
     );
@@ -332,15 +337,15 @@ fn test_code_block_no_trailing_or_doubled_blank_rows() {
 fn test_code_block_in_quote_keeps_border() {
     assert_eq!(
         plain("> ```\n> a\n> ```", 80),
-        vec!["  |   ╭───", "  |   | a", "  |   ╰───"]
+        vec!["  │   ╭───", "  │   │ a", "  │   ╰───"]
     );
 }
 
 #[test]
 fn test_code_block_expands_tabs_and_truncates() {
-    assert_eq!(plain("```\n\tx\ty\n```", 80)[1], "  |     x   y");
+    assert_eq!(plain("```\n\tx\ty\n```", 80)[1], "  │     x   y");
     let lines = plain("```\n0123456789abcdef\n```", 16);
-    assert_eq!(lines[1], "  | 012345678…");
+    assert_eq!(lines[1], "  │ 012345678…");
     assert!(lines.iter().all(|l| style::display_width(l) <= 14));
 }
 
@@ -365,7 +370,7 @@ fn only_sgr_escapes(s: &str) -> bool {
 fn test_control_characters_are_neutralised() {
     let md = "Evil \x1b]0;title\x07 and \x1b[31mred\x1b[0m\r\x7f `\x1b[2J` \
               [x](http://a\x1b/) \u{9b}31m\n\n```\x1b]52\n\x1b[1mcode\x07\n```";
-    let plain_out = render(parser::parse(md), 80, false, false).join("\n");
+    let plain_out = render(parser::parse(md), 80, &Theme::none(), false).join("\n");
     assert!(
         !plain_out
             .chars()
@@ -373,7 +378,7 @@ fn test_control_characters_are_neutralised() {
         "control chars leaked: {:?}",
         plain_out
     );
-    let color_out = render(parser::parse(md), 80, true, false).join("\n");
+    let color_out = render(parser::parse(md), 80, &Theme::dark(true), false).join("\n");
     assert!(only_sgr_escapes(&color_out), "{:?}", color_out);
     assert!(!color_out.contains('\x07') && !color_out.contains('\u{9b}'));
 }
@@ -382,11 +387,11 @@ fn test_control_characters_are_neutralised() {
 fn test_link_in_table_cell_stays_in_cell() {
     let md = "| A | B |\n|---|---|\n| [l](https://x.io) | `c` **b** |\n\nafter";
     let lines = plain(md, 80);
-    assert!(lines.iter().any(|l| l.contains("| l (https://x.io) |")));
+    assert!(lines.iter().any(|l| l.contains("│ l (https://x.io) │")));
     assert!(lines.iter().any(|l| l.contains("`c` b")));
     assert_eq!(lines.last().unwrap(), "after");
     assert!(!lines.iter().any(|l| l.trim() == "(https://x.io)"));
-    let color = render(parser::parse(md), 80, true, false).join("\n");
+    let color = render(parser::parse(md), 80, &Theme::dark(true), false).join("\n");
     assert!(color.contains("\x1b[1mb\x1b[0m"), "{color:?}");
 }
 
@@ -394,8 +399,8 @@ fn test_link_in_table_cell_stays_in_cell() {
 fn test_table_alignment() {
     let md = "| Left | Center | Right |\n|:--|:-:|--:|\n| a | b | c |";
     let lines = plain(md, 80);
-    assert_eq!(lines[1], "  | Left | Center | Right |");
-    assert_eq!(lines[3], "  | a    |   b    |     c |");
+    assert_eq!(lines[1], "  │ Left │ Center │ Right │");
+    assert_eq!(lines[3], "  │ a    │   b    │     c │");
 }
 
 #[test]
@@ -423,7 +428,7 @@ fn test_too_wide_table_falls_back_to_vertical() {
 fn test_yaml_front_matter_skipped() {
     assert_eq!(
         plain("---\ntitle: x\n---\n\n# Head\n\nbody", 80),
-        vec!["Head", "", "body"]
+        vec!["Head", "════", "", "body"]
     );
 }
 
@@ -433,7 +438,12 @@ fn test_footnotes() {
         plain("Text[^1].\n\n[^1]: The body.", 80),
         vec!["Text[1].", "", "[1]: The body."]
     );
-    let color = render(parser::parse("a[^n]\n\n[^n]: b"), 80, true, false);
+    let color = render(
+        parser::parse("a[^n]\n\n[^n]: b"),
+        80,
+        &Theme::dark(true),
+        false,
+    );
     assert_eq!(color[0], "a\x1b[2m[n]\x1b[0m");
     assert_eq!(color[2], "\x1b[2m[n]: \x1b[0mb");
 }
@@ -456,7 +466,7 @@ fn test_html_block_text_kept() {
         vec!["Click & see", "", "body"]
     );
     assert_eq!(strip_html("a < b <i>c</i>"), "a < b c");
-    let color = render(parser::parse("<p>x y</p>"), 80, true, false);
+    let color = render(parser::parse("<p>x y</p>"), 80, &Theme::dark(true), false);
     assert_eq!(color, vec!["\x1b[2mx y\x1b[0m"]);
 }
 
@@ -466,7 +476,7 @@ fn test_images() {
         plain("![Alt text](a.png) ![](b.png)", 80),
         vec!["[image: Alt text] [image]"]
     );
-    let color = render(parser::parse("![a](a.png)"), 80, true, false);
+    let color = render(parser::parse("![a](a.png)"), 80, &Theme::dark(true), false);
     assert_eq!(color, vec!["\x1b[2m[image: a]\x1b[0m"]);
 }
 
@@ -493,7 +503,7 @@ fn test_task_checkbox_replaces_bullet() {
         plain("- [x] loose\n\n- [ ] two", 80),
         vec!["  [✓] loose", "", "  [ ] two"]
     );
-    let color = render(parser::parse("- [x] a"), 80, true, false);
+    let color = render(parser::parse("- [x] a"), 80, &Theme::dark(true), false);
     assert_eq!(color[0], "  \x1b[1;32m[✓] \x1b[0ma");
 }
 
@@ -508,11 +518,56 @@ fn test_autolink_url_not_repeated() {
 
 #[test]
 fn test_link_text_underlined() {
-    let lines = render(parser::parse("[t](https://a.io)"), 80, true, false);
+    let lines = render(
+        parser::parse("[t](https://a.io)"),
+        80,
+        &Theme::dark(true),
+        false,
+    );
     assert_eq!(lines[0], "\x1b[4mt\x1b[0;2m (https://a.io)\x1b[0m");
 }
 
 #[test]
 fn test_empty_list_item_keeps_marker() {
     assert_eq!(plain("-\n- x", 80), vec!["  • ", "  • x"]);
+}
+
+#[test]
+fn plain_headings_are_underlined() {
+    assert_eq!(
+        plain("# Title\n\n## Sub head\n\n### Three", 80),
+        vec!["Title", "═════", "", "Sub head", "────────", "", "Three"]
+    );
+    // Sized to the widest wrapped line, in display columns.
+    assert_eq!(plain("# 日本語", 80), vec!["日本語", "══════"]);
+    assert_eq!(plain("# aaaa bbbb", 8), vec!["aaaa", "bbbb", "════"]);
+    // Colour mode relies on the heading style instead.
+    assert_eq!(color("# Title", 80), vec!["\x1b[1;4;97mTitle\x1b[0m"]);
+}
+
+#[test]
+fn light_theme_styles() {
+    let lines = render(
+        parser::parse("# T\n\n## U\n\n`c` *i*"),
+        80,
+        &Theme::light(false),
+        false,
+    );
+    assert_eq!(
+        lines,
+        vec![
+            "\x1b[1;4mT\x1b[0m",
+            "",
+            "\x1b[1;34mU\x1b[0m",
+            "",
+            "\x1b[48;5;254m c \x1b[0m \x1b[4mi\x1b[0m"
+        ]
+    );
+}
+
+#[test]
+fn plain_mode_uses_unicode_borders() {
+    let out = plain("> q\n\n```\nx\n```\n\n| a |\n|---|\n| b |", 80).join("\n");
+    assert!(!out.contains('|'), "{out}");
+    assert!(out.contains("│ q") && out.contains("│ x") && out.contains("│ b   │"));
 }
