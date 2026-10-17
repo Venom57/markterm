@@ -8,6 +8,8 @@ pub fn parse(content: &str) -> Vec<Event<'_>> {
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
 
     Parser::new_ext(content, options).collect()
 }

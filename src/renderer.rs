@@ -28,6 +28,8 @@ struct RenderState {
     table_alignments: Vec<Alignment>,
     table_rows: Vec<Vec<String>>,
     in_table_cell: bool,
+    /// Inside a YAML front matter block (skipped).
+    in_metadata: bool,
 }
 
 enum Container {
@@ -67,6 +69,7 @@ impl RenderState {
             table_alignments: Vec::new(),
             table_rows: Vec::new(),
             in_table_cell: false,
+            in_metadata: false,
         }
     }
 
@@ -441,7 +444,15 @@ pub fn render(events: Vec<Event<'_>>, width: u16, use_color: bool, no_wrap: bool
     let mut state = RenderState::new(width, use_color, no_wrap);
 
     for event in events {
+        if state.in_metadata {
+            // YAML front matter is not part of the rendered document.
+            if let Event::End(TagEnd::MetadataBlock(_)) = event {
+                state.in_metadata = false;
+            }
+            continue;
+        }
         match event {
+            Event::Start(Tag::MetadataBlock(_)) => state.in_metadata = true,
             Event::Start(tag) => handle_start_tag(&mut state, &tag),
             Event::End(tag) => handle_end_tag(&mut state, &tag),
             Event::Text(text) => handle_text(&mut state, &style::sanitize(&text)),
@@ -450,6 +461,11 @@ pub fn render(events: Vec<Event<'_>>, width: u16, use_color: bool, no_wrap: bool
             Event::HardBreak => handle_hard_break(&mut state),
             Event::Rule => handle_rule(&mut state),
             Event::TaskListMarker(checked) => handle_task_marker(&mut state, checked),
+            Event::FootnoteReference(label) => {
+                let label = format!("[{}]", style::sanitize(&label));
+                let styled = style::styled(&label, &[style::DIM], state.use_color);
+                state.inline_buf().push_str(&styled);
+            }
             _ => {}
         }
     }
@@ -515,6 +531,19 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
                 pending: true,
             });
         }
+        Tag::FootnoteDefinition(label) => {
+            // Rendered where it appears, as `[label]: body` with the body
+            // hanging under itself like a list item.
+            state.push_blank();
+            let marker = format!("[{}]: ", style::sanitize(label));
+            let width = style::visible_len(&marker);
+            let marker = style::styled(&marker, &[style::DIM], state.use_color);
+            state.containers.push(Container::Item {
+                marker,
+                width,
+                pending: true,
+            });
+        }
         Tag::Emphasis => {
             state.italic = true;
         }
@@ -573,7 +602,7 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
             state.flush_wrapped();
             state.containers.pop();
         }
-        TagEnd::Item => {
+        TagEnd::Item | TagEnd::FootnoteDefinition => {
             state.flush_wrapped();
             if matches!(
                 state.containers.last(),
@@ -1279,6 +1308,25 @@ mod tests {
             ]
         );
         assert!(lines.iter().all(|l| style::visible_len(l) <= 18));
+    }
+
+    #[test]
+    fn test_yaml_front_matter_skipped() {
+        assert_eq!(
+            plain("---\ntitle: x\n---\n\n# Head\n\nbody", 80),
+            vec!["Head", "", "body"]
+        );
+    }
+
+    #[test]
+    fn test_footnotes() {
+        assert_eq!(
+            plain("Text[^1].\n\n[^1]: The body.", 80),
+            vec!["Text[1].", "", "[1]: The body."]
+        );
+        let color = render(parser::parse("a[^n]\n\n[^n]: b"), 80, true, false);
+        assert!(color[0].contains(&format!("{}[n]{}", style::DIM, style::RESET)));
+        assert!(color[2].starts_with(&format!("{}[n]: {}", style::DIM, style::RESET)));
     }
 
     #[test]
