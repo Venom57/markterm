@@ -3,26 +3,32 @@
     check hanging indent alignment
     here
 
-␛[1mbold text that spans many words and
-must wrap across lines to see style
-leakage behaviour␛[0m
+␛[1mbold text that spans many words and␛[0m
+␛[1mmust wrap across lines to see style␛[0m
+␛[1mleakage behaviour␛[0m
 
-  ␛[2m│ ␛[0m␛[1mbold quote that is long enough to
-  ␛[2m│ ␛[0mwrap across multiple lines inside
-  ␛[2m│ ␛[0mthe blockquote border ok␛[0m
+  ␛[2m│ ␛[0;1mbold quote that is long enough to␛[0m
+  ␛[2m│ ␛[0;1mwrap across multiple lines inside␛[0m
+  ␛[2m│ ␛[0;1mthe blockquote border ok␛[0m
 
 Visit
-https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all/whatsoever/ok
-now.
+https://example.com/a/very/long/path/t
+hat/does/not/have/any/spaces/in/it/at/
+all/whatsoever/ok now.
 
-See ␛[4mdocs␛[0m␛[2m
-(https://example.com/a/very/long/path/that/does/not/have/any/spaces/in/it/at/all)␛[0m
-and ␛[4mhttps://auto.link/x␛[0m.
+See ␛[4mdocs␛[0m
+␛[2m(https://example.com/a/very/long/path/␛[0m
+␛[2mthat/does/not/have/any/spaces/in/it/at␛[0m
+␛[2m/all)␛[0m and ␛[4mhttps://auto.link/x␛[0m.
 
-日本語のテキストはとても長いのでこの行は折り返されるべきですが幅の計算が正しくないと端末の幅を超えてしまいます
-日本語 日本語 日本語 日本語
+日本語のテキストはとても長いのでこの行
+は折り返されるべきですが幅の計算が正し
+くないと端末の幅を超えてしまいます 日
+本語 日本語 日本語 日本語
 
-Emoji 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
+Emoji 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
+🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
+🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 end
 
-Use ␛[48;5;236mfoo bar ␛[0mand ␛[48;5;236mx ␛[0mhere.
+Use ␛[48;5;236m foo  bar ␛[0m and ␛[48;5;236m x ␛[0m here.

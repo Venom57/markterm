@@ -1,4 +1,4 @@
-␛[1m␛[4m␛[97mHeading␛[0m
+␛[1;4;97mHeading␛[0m
 
   ␛[36m• ␛[0mitem text here
 

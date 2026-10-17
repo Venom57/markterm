@@ -17,7 +17,7 @@
   ␛[2m│␛[0m
   ␛[2m│ ␛[0msecond para
   ␛[2m│␛[0m
-  ␛[2m│ ␛[0m␛[2m│ ␛[0minner nested
+  ␛[2m│ │ ␛[0minner nested
   ␛[2m│␛[0m
   ␛[2m│ ␛[0mback to outer
 
