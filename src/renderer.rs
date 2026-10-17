@@ -1,6 +1,6 @@
 //! Converts pulldown-cmark events into ANSI-styled, word-wrapped terminal lines.
 
-use pulldown_cmark::{CodeBlockKind, Event, LinkType, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, LinkType, Tag, TagEnd};
 
 use crate::style;
 
@@ -25,7 +25,7 @@ struct RenderState {
     link: Option<LinkState>,
     table_row: Vec<String>,
     table_cell_buf: String,
-    table_alignments: Vec<pulldown_cmark::Alignment>,
+    table_alignments: Vec<Alignment>,
     table_rows: Vec<Vec<String>>,
     in_table_cell: bool,
 }
@@ -745,13 +745,16 @@ fn render_table(state: &mut RenderState) {
     // Table overhead: 2 (margin) + 1 (left border) + 1 (right border) + 2*num_cols (spaces) + (num_cols-1) (mid borders)
     // = 3 + 3*num_cols
     let overhead = 3 + 3 * num_cols;
-    let max_content = state
-        .width
-        .saturating_sub(state.prefix_width())
-        .saturating_sub(overhead);
+    let available = state.width.saturating_sub(state.prefix_width());
+    if available < overhead + 3 * num_cols {
+        // Not even 3 columns per cell fit: lay the rows out vertically.
+        render_table_vertical(state, available);
+        return;
+    }
+    let max_content = available - overhead;
     let total: usize = col_widths.iter().sum();
 
-    if total > max_content && max_content > 0 {
+    if total > max_content {
         let min_col_width = 3usize;
         let guaranteed = min_col_width * num_cols;
 
@@ -826,7 +829,9 @@ fn render_table(state: &mut RenderState) {
 
     draw_separator(state, "┌", "┬", "┐", "─");
 
-    for (row_idx, row) in state.table_rows.clone().iter().enumerate() {
+    let rows = std::mem::take(&mut state.table_rows);
+    let alignments = std::mem::take(&mut state.table_alignments);
+    for (row_idx, row) in rows.iter().enumerate() {
         // Wrap each cell to its allocated column width
         let mut wrapped_cells: Vec<Vec<String>> = row
             .iter()
@@ -858,15 +863,10 @@ fn render_table(state: &mut RenderState) {
                 let w = col_widths.get(i).copied().unwrap_or(3);
                 let cell_text = cell_lines.get(line_idx).map(|s| s.as_str()).unwrap_or("");
 
-                // Pad to column width based on visible length
-                let visible = style::visible_len(cell_text);
-                let pad = w.saturating_sub(visible);
-                let padded = format!("{}{}", cell_text, " ".repeat(pad));
-
-                let styled_cell = if row_idx == 0 && use_color {
-                    // Re-open bold after any inline style reset inside the cell.
-                    let rebold = format!("{}{}", style::RESET, style::BOLD);
-                    style::styled(&padded.replace(style::RESET, &rebold), &[style::BOLD], true)
+                let align = alignments.get(i).copied().unwrap_or(Alignment::None);
+                let padded = pad_cell(cell_text, w, align);
+                let styled_cell = if row_idx == 0 {
+                    bold_cell(&padded, use_color)
                 } else {
                     padded
                 };
@@ -896,9 +896,81 @@ fn render_table(state: &mut RenderState) {
     }
 
     draw_separator(state, "└", "┴", "┘", "─");
+}
 
-    state.table_rows.clear();
+/// Pad a (possibly styled) cell to `width` columns according to `align`.
+fn pad_cell(text: &str, width: usize, align: Alignment) -> String {
+    let pad = width.saturating_sub(style::visible_len(text));
+    let (left, right) = match align {
+        Alignment::Right => (pad, 0),
+        Alignment::Center => (pad / 2, pad - pad / 2),
+        Alignment::Left | Alignment::None => (0, pad),
+    };
+    format!("{}{}{}", " ".repeat(left), text, " ".repeat(right))
+}
+
+/// Bold a header cell, re-opening bold after any inline style reset inside it.
+fn bold_cell(text: &str, use_color: bool) -> String {
+    if !use_color {
+        return text.to_string();
+    }
+    let rebold = format!("{}{}", style::RESET, style::BOLD);
+    style::styled(&text.replace(style::RESET, &rebold), &[style::BOLD], true)
+}
+
+/// Fallback for tables too wide for the terminal: each body row becomes a
+/// block of `header: value` lines, with rows separated by a dim rule.
+fn render_table_vertical(state: &mut RenderState, available: usize) {
+    let rows = std::mem::take(&mut state.table_rows);
     state.table_alignments.clear();
+    let (no_wrap, use_color) = (state.no_wrap, state.use_color);
+    let Some((headers, body)) = rows.split_first() else {
+        return;
+    };
+    let rule = style::styled(&"─".repeat(available), &[style::DIM], use_color);
+
+    let label_width = headers
+        .iter()
+        .map(|h| style::visible_len(h))
+        .max()
+        .unwrap_or(0)
+        .min(available / 2);
+
+    state.emit(&rule);
+    if body.is_empty() {
+        for header in headers {
+            state.emit(&bold_cell(header, use_color));
+        }
+        state.emit(&rule);
+        return;
+    }
+    for row in body {
+        for (i, header) in headers.iter().enumerate() {
+            let value = row.get(i).map(String::as_str).unwrap_or("");
+            let label = pad_cell(&format!("{}:", header), label_width + 1, Alignment::Left);
+            let label = bold_cell(&label, use_color);
+            let label_visible = style::visible_len(&label) + 1;
+            let value_width = available.saturating_sub(label_visible);
+            if value_width >= 8 {
+                let lines = wrap_cell_text(value, value_width, no_wrap, use_color);
+                for (n, line) in lines.iter().enumerate() {
+                    if n == 0 {
+                        state.emit(&format!("{} {}", label, line));
+                    } else {
+                        state.emit(&format!("{}{}", " ".repeat(label_visible), line));
+                    }
+                }
+            } else {
+                // Too narrow for side-by-side: value below its label.
+                state.emit(&label);
+                let width = available.saturating_sub(2);
+                for line in wrap_cell_text(value, width, no_wrap, use_color) {
+                    state.emit(&format!("  {}", line));
+                }
+            }
+        }
+        state.emit(&rule);
+    }
 }
 
 #[cfg(test)]
@@ -1178,6 +1250,35 @@ mod tests {
         assert!(!lines.iter().any(|l| l.trim() == "(https://x.io)"));
         let color = render(parser::parse(md), 80, true, false).join("\n");
         assert!(color.contains(&format!("{}b{}", style::BOLD, style::RESET)));
+    }
+
+    #[test]
+    fn test_table_alignment() {
+        let md = "| Left | Center | Right |\n|:--|:-:|--:|\n| a | b | c |";
+        let lines = plain(md, 80);
+        assert_eq!(lines[1], "  | Left | Center | Right |");
+        assert_eq!(lines[3], "  | a    |   b    |     c |");
+    }
+
+    #[test]
+    fn test_too_wide_table_falls_back_to_vertical() {
+        let md = "| a | bb | c |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |";
+        let lines = plain(md, 18);
+        assert_eq!(
+            lines,
+            vec![
+                "────────────────",
+                "a:  1",
+                "bb: 2",
+                "c:  3",
+                "────────────────",
+                "a:  4",
+                "bb: 5",
+                "c:  6",
+                "────────────────",
+            ]
+        );
+        assert!(lines.iter().all(|l| style::visible_len(l) <= 18));
     }
 
     #[test]

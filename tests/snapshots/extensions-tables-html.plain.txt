@@ -9,11 +9,11 @@ H2
 H3
 
   ┌──────┬─────────────────────────────────────────────┬─────────────────────┐
-  | Left | Center                                      | Right               |
+  | Left |                   Center                    |               Right |
   ├──────┼─────────────────────────────────────────────┼─────────────────────┤
-  | bold | `code`                                      | link (https://x.io) |
-  | a    | https://example.com/averyveryverylongurlwithoutspaces/abc | 1                   |
-  | 漢字漢字 | b                                           | 2                   |
+  | bold |                   `code`                    | link (https://x.io) |
+  | a    | https://example.com/averyveryverylongurlwithoutspaces/abc |                   1 |
+  | 漢字漢字 |                      b                      |                   2 |
   └──────┴─────────────────────────────────────────────┴─────────────────────┘
 
 After table paragraph.
