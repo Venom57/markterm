@@ -93,6 +93,16 @@ pub fn display_width(s: &str) -> usize {
     })
 }
 
+/// Remove all escape sequences from `s`.
+pub fn strip_ansi(s: &str) -> String {
+    tokens(s)
+        .filter_map(|t| match t {
+            Token::Char(c) => Some(c),
+            Token::Esc(_) => None,
+        })
+        .collect()
+}
+
 /// Clip a styled line to at most `width` display columns. Escape sequences
 /// are kept intact (never cut), tabs are expanded to spaces, and a wide
 /// character that would straddle the edge is dropped. The caller is
@@ -214,6 +224,12 @@ mod tests {
         assert_eq!(display_width("\x1b[1m日本\x1b[0m"), 4);
         assert_eq!(display_width("e\u{301}"), 1);
         assert_eq!(display_width("a\tb"), 9);
+    }
+
+    #[test]
+    fn strip_removes_all_escapes() {
+        assert_eq!(strip_ansi("\x1b[1;31mred\x1b[0m plain"), "red plain");
+        assert_eq!(strip_ansi("\x1b]8;;u\x07link\x1b]8;;\x07"), "link");
     }
 
     #[test]

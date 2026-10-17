@@ -3,6 +3,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use super::search::Search;
 use super::text;
 
 /// A pager command, independent of which key produced it.
@@ -29,6 +30,14 @@ pub enum Command {
     Percent,
     /// A digit of a numeric count prefix.
     Digit(u8),
+    /// `/`: prompt for a search pattern.
+    Search,
+    /// `n`: next match.
+    NextMatch,
+    /// `N`: previous match.
+    PrevMatch,
+    /// `h` / `?`: show the key bindings.
+    Help,
 }
 
 /// Map a key event to a command. Plain keys accept no modifiers other than
@@ -65,6 +74,10 @@ pub fn map_key(key: &KeyEvent) -> Option<Command> {
         KeyCode::Char('G' | '>') | KeyCode::End => Bottom,
         KeyCode::Char('%' | 'p') => Percent,
         KeyCode::Char('r') => Redraw,
+        KeyCode::Char('/') => Search,
+        KeyCode::Char('n') => NextMatch,
+        KeyCode::Char('N') => PrevMatch,
+        KeyCode::Char('h' | '?') => Help,
         KeyCode::Char(c @ '0'..='9') => Digit(c as u8 - b'0'),
         _ => return None,
     };
@@ -93,10 +106,49 @@ pub struct Frame {
     pub rows: Vec<String>,
     /// Plain status text, padded/clipped to exactly the terminal width.
     pub status: String,
+    /// Column of the visible cursor on the status line (search prompt).
+    pub cursor: Option<u16>,
 }
 
-const HINT_FULL: &str = "[Space] next  [b] back  [q] quit";
-const HINT_SHORT: &str = "[q] quit";
+const HINT_FULL: &str = "[Space] next  [/] search  [?] help  [q] quit";
+const HINT_SHORT: &str = "[?] help  [q] quit";
+const HINT_MIN: &str = "[?] help";
+
+/// The help screen shown by `h` / `?`.
+const HELP: &[&str] = &[
+    "markterm key bindings",
+    "",
+    "  Space  f  z  PgDn  Ctrl-F   Forward one page",
+    "  b  w  PgUp  Ctrl-B          Back one page",
+    "  Enter  j  e  Down  Ctrl-E   Forward one line",
+    "  k  y  Up  Ctrl-Y            Back one line",
+    "  d  Ctrl-D                   Forward half a page",
+    "  u  Ctrl-U                   Back half a page",
+    "  g  <  Home                  Go to the top (<n>g: go to line n)",
+    "  G  >  End                   Go to the bottom (<n>G: go to line n)",
+    "  <n>%  <n>p                  Go to n percent of the document",
+    "  /pattern                    Search forward (smart case)",
+    "  n  N                        Next / previous match",
+    "  Ctrl-L  r                   Redraw the screen",
+    "  Ctrl-Z                      Suspend (resume with fg)",
+    "  h  ?                        Show this help",
+    "  q  Q  Esc                   Quit",
+    "  Ctrl-C                      Quit with exit status 130",
+    "",
+    "A number typed before a movement key repeats it, e.g. 10j.",
+    "In the search prompt: Enter searches, Esc cancels, Backspace edits;",
+    "an empty pattern repeats the previous search.",
+];
+
+/// Input mode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Mode {
+    Normal,
+    /// Typing a search pattern.
+    Prompt(String),
+    /// Showing the help screen.
+    Help,
+}
 
 /// The pager's state.
 pub struct Pager {
@@ -105,6 +157,12 @@ pub struct Pager {
     offset: usize,
     page_height: usize,
     count: Option<usize>,
+    mode: Mode,
+    search: Option<Search>,
+    /// Line of the most recent match, used as the start for `n` / `N`.
+    last_match: Option<usize>,
+    /// One-shot status message, cleared by the next key.
+    message: Option<String>,
 }
 
 impl Pager {
@@ -115,6 +173,10 @@ impl Pager {
             offset: 0,
             page_height: page_height.max(1),
             count: None,
+            mode: Mode::Normal,
+            search: None,
+            last_match: None,
+            message: None,
         }
     }
 
@@ -147,6 +209,8 @@ impl Pager {
                 self.offset = usize::try_from(scaled).unwrap_or(usize::MAX);
             }
             self.lines = lines;
+            // Line numbers changed; restart n/N from the view.
+            self.last_match = None;
         }
         self.page_height = page_height.max(1);
         self.offset = if was_at_end {
@@ -174,13 +238,130 @@ impl Pager {
     }
 
     pub fn handle_key(&mut self, key: &KeyEvent) -> Outcome {
-        match map_key(key) {
+        match self.mode {
+            Mode::Prompt(_) => return self.prompt_key(key),
+            Mode::Help => {
+                // Any key leaves the help screen; Ctrl-C still quits.
+                self.mode = Mode::Normal;
+                if map_key(key) == Some(Command::Interrupt) {
+                    return Outcome::Quit(130);
+                }
+                return Outcome::Draw;
+            }
+            Mode::Normal => {}
+        }
+        let had_message = self.message.take().is_some();
+        let outcome = match map_key(key) {
             Some(cmd) => self.apply(cmd),
             None => {
                 self.count = None;
                 Outcome::Nothing
             }
+        };
+        if had_message && outcome == Outcome::Nothing {
+            Outcome::Draw
+        } else {
+            outcome
         }
+    }
+
+    /// Keys while typing a search pattern.
+    fn prompt_key(&mut self, key: &KeyEvent) -> Outcome {
+        let Mode::Prompt(pattern) = &mut self.mode else {
+            return Outcome::Nothing;
+        };
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match key.code {
+            KeyCode::Esc => self.mode = Mode::Normal,
+            KeyCode::Char('c') if ctrl => self.mode = Mode::Normal,
+            KeyCode::Backspace => {
+                if pattern.pop().is_none() {
+                    self.mode = Mode::Normal;
+                }
+            }
+            KeyCode::Enter => {
+                let pattern = std::mem::take(pattern);
+                self.mode = Mode::Normal;
+                if let Some(search) = Search::new(&pattern) {
+                    self.search = Some(search);
+                } else if self.search.is_none() {
+                    self.message = Some("No previous search pattern".into());
+                    return Outcome::Draw;
+                }
+                let start = self.offset;
+                self.search_forward(start);
+            }
+            KeyCode::Char(c) if !ctrl && !key.modifiers.contains(KeyModifiers::ALT) => {
+                pattern.push(c);
+            }
+            _ => return Outcome::Nothing,
+        }
+        Outcome::Draw
+    }
+
+    fn visible(&self, line: usize) -> bool {
+        line >= self.offset && line < self.offset + self.page_height
+    }
+
+    /// Jump to the first match at or after line `start`, wrapping around.
+    fn search_forward(&mut self, start: usize) {
+        let Some(search) = &self.search else { return };
+        let total = self.total();
+        let start = start.min(total);
+        let found = (start..total)
+            .map(|i| (i, false))
+            .chain((0..start).map(|i| (i, true)))
+            .find(|&(i, _)| search.matches_line(&self.lines[i]));
+        self.jump_to_match(found, "Search wrapped around to the top");
+    }
+
+    /// Jump to the last match at or before line `start` (`None` = before
+    /// the first line), wrapping around.
+    fn search_backward(&mut self, start: Option<usize>) {
+        let Some(search) = &self.search else { return };
+        let total = self.total();
+        let split = start.map_or(0, |s| (s + 1).min(total));
+        let found = (0..split)
+            .rev()
+            .map(|i| (i, false))
+            .chain((split..total).rev().map(|i| (i, true)))
+            .find(|&(i, _)| search.matches_line(&self.lines[i]));
+        self.jump_to_match(found, "Search wrapped around to the bottom");
+    }
+
+    fn jump_to_match(&mut self, found: Option<(usize, bool)>, wrap_msg: &str) {
+        match found {
+            Some((line, wrapped)) => {
+                self.last_match = Some(line);
+                self.scroll_to(line);
+                if wrapped {
+                    self.message = Some(wrap_msg.to_string());
+                }
+            }
+            None => {
+                let pattern = self.search.as_ref().map_or("", |s| s.pattern());
+                self.message = Some(format!("Pattern not found: {pattern}"));
+            }
+        }
+    }
+
+    fn next_match(&mut self, forward: bool) -> Outcome {
+        if self.search.is_none() {
+            self.message = Some("No previous search pattern".into());
+            return Outcome::Draw;
+        }
+        let current = self.last_match.filter(|&m| self.visible(m));
+        if forward {
+            let start = current.map_or(self.offset, |m| m + 1);
+            self.search_forward(start);
+        } else {
+            let start = match current {
+                Some(m) => m.checked_sub(1),
+                None => self.offset.checked_sub(1),
+            };
+            self.search_backward(start);
+        }
+        Outcome::Draw
     }
 
     /// Apply a command, consuming any pending count prefix.
@@ -202,6 +383,16 @@ impl Pager {
             Command::Suspend => return Outcome::Suspend,
             Command::Redraw => return Outcome::Redraw,
             Command::Digit(_) => unreachable!("handled above"),
+            Command::Search => {
+                self.mode = Mode::Prompt(String::new());
+                return Outcome::Draw;
+            }
+            Command::NextMatch => return self.next_match(true),
+            Command::PrevMatch => return self.next_match(false),
+            Command::Help => {
+                self.mode = Mode::Help;
+                return Outcome::Draw;
+            }
             Command::LineDown => self.scroll_by(times_i),
             Command::LineUp => self.scroll_by(-times_i),
             Command::PageDown => self.scroll_by(page.saturating_mul(times_i)),
@@ -227,16 +418,40 @@ impl Pager {
 
     /// Compose the screen for a terminal `width` columns wide.
     pub fn frame(&self, width: usize) -> Frame {
+        if self.mode == Mode::Help {
+            let rows = (0..self.page_height)
+                .map(|i| text::clip(HELP.get(i).copied().unwrap_or(""), width))
+                .collect();
+            return Frame {
+                rows,
+                status: pad_to(" HELP - press any key to return ", width),
+                cursor: None,
+            };
+        }
+
         let mut rows = Vec::with_capacity(self.page_height);
         for i in 0..self.page_height {
-            match self.lines.get(self.offset + i) {
-                Some(line) => rows.push(text::clip(line, width)),
-                None => rows.push(text::clip("~", width)),
-            }
+            let row = match (self.lines.get(self.offset + i), &self.search) {
+                (Some(line), Some(search)) => text::clip(&search.highlight(line), width),
+                (Some(line), None) => text::clip(line, width),
+                (None, _) => text::clip("~", width),
+            };
+            rows.push(row);
         }
+
+        let (status, cursor) = match (&self.mode, &self.message) {
+            (Mode::Prompt(pattern), _) => {
+                let prompt = text::elide_left(&format!("/{pattern}"), width.saturating_sub(1));
+                let col = text::display_width(&prompt).min(width.saturating_sub(1));
+                (pad_to(&prompt, width), Some(col as u16))
+            }
+            (_, Some(msg)) => (pad_to(&format!(" {msg} "), width), None),
+            _ => (self.status_line(width), None),
+        };
         Frame {
             rows,
-            status: self.status_line(width),
+            status,
+            cursor,
         }
     }
 
@@ -265,7 +480,7 @@ impl Pager {
 pub fn status_line(name: &str, position: &str, width: usize) -> String {
     let pos_part = format!(" | {position} ");
     let name_w = text::display_width(name);
-    for hint in [HINT_FULL, HINT_SHORT, ""] {
+    for hint in [HINT_FULL, HINT_SHORT, HINT_MIN, ""] {
         let right = if hint.is_empty() {
             String::new()
         } else {
@@ -500,6 +715,197 @@ mod tests {
         assert!(p.at_end());
     }
 
+    fn doc(lines: &[&str], height: usize) -> Pager {
+        Pager::new(
+            lines.iter().map(|s| s.to_string()).collect(),
+            "doc.md",
+            height,
+        )
+    }
+
+    fn type_search(p: &mut Pager, pattern: &str) -> Outcome {
+        p.handle_key(&ch('/'));
+        for c in pattern.chars() {
+            p.handle_key(&ch(c));
+        }
+        p.handle_key(&key(KeyCode::Enter))
+    }
+
+    fn numbered_with_matches(n: usize, matches: &[usize]) -> Pager {
+        let lines = (0..n)
+            .map(|i| {
+                if matches.contains(&i) {
+                    format!("line {i} \x1b[1mNeedle\x1b[0m here")
+                } else {
+                    format!("line {i}")
+                }
+            })
+            .collect();
+        Pager::new(lines, "doc.md", 5)
+    }
+
+    #[test]
+    fn search_prompt_editing_and_status() {
+        let mut p = pager(20, 5);
+        assert_eq!(p.handle_key(&ch('/')), Outcome::Draw);
+        p.handle_key(&ch('a'));
+        p.handle_key(&ch('b'));
+        let f = p.frame(20);
+        assert!(f.status.starts_with("/ab"), "{:?}", f.status);
+        assert_eq!(f.cursor, Some(3));
+        p.handle_key(&key(KeyCode::Backspace));
+        assert!(p.frame(20).status.starts_with("/a "));
+        // Esc cancels without quitting.
+        assert_eq!(p.handle_key(&key(KeyCode::Esc)), Outcome::Draw);
+        assert_eq!(p.frame(20).cursor, None);
+        // Backspace on an empty prompt cancels too.
+        p.handle_key(&ch('/'));
+        p.handle_key(&key(KeyCode::Backspace));
+        assert_eq!(p.frame(20).cursor, None);
+        // Keys typed in the prompt are not commands.
+        p.handle_key(&ch('/'));
+        assert_eq!(p.handle_key(&ch('q')), Outcome::Draw);
+        assert_eq!(p.handle_key(&ctrl('c')), Outcome::Draw);
+        assert_eq!(p.frame(20).cursor, None);
+    }
+
+    #[test]
+    fn search_jumps_to_first_match_at_or_after_top() {
+        let mut p = numbered_with_matches(50, &[3, 20, 40]);
+        type_search(&mut p, "needle");
+        assert_eq!(p.offset(), 3);
+        // A match on the top line itself is found (inclusive).
+        let mut p = numbered_with_matches(50, &[0, 20]);
+        type_search(&mut p, "needle");
+        assert_eq!(p.offset(), 0);
+    }
+
+    #[test]
+    fn search_next_previous_and_wrap() {
+        let mut p = numbered_with_matches(50, &[3, 20, 40]);
+        type_search(&mut p, "needle");
+        assert_eq!(p.offset(), 3);
+        p.handle_key(&ch('n'));
+        assert_eq!(p.offset(), 20);
+        p.handle_key(&ch('n'));
+        assert_eq!(p.offset(), 40);
+        assert!(p.message.is_none());
+        p.handle_key(&ch('n'));
+        assert_eq!(p.offset(), 3);
+        assert!(p.frame(80).status.contains("wrapped around to the top"));
+        // The message clears on the next key.
+        p.handle_key(&ch('N'));
+        assert_eq!(p.offset(), 40);
+        assert!(p.frame(80).status.contains("wrapped around to the bottom"));
+        p.handle_key(&ch('N'));
+        assert_eq!(p.offset(), 20);
+        assert!(!p.frame(80).status.contains("wrapped"));
+    }
+
+    #[test]
+    fn search_next_cycles_matches_on_last_page() {
+        // Matches near the end cannot all be scrolled to the top line.
+        let mut p = numbered_with_matches(20, &[16, 18]);
+        type_search(&mut p, "needle");
+        assert_eq!(p.offset(), 15);
+        assert_eq!(p.last_match, Some(16));
+        p.handle_key(&ch('n'));
+        assert_eq!(p.last_match, Some(18));
+        p.handle_key(&ch('n'));
+        assert_eq!(p.last_match, Some(16));
+        assert!(p.frame(80).status.contains("wrapped"));
+    }
+
+    #[test]
+    fn search_after_scrolling_starts_from_view() {
+        let mut p = numbered_with_matches(60, &[3, 20, 40]);
+        type_search(&mut p, "needle");
+        p.handle_key(&ch('G'));
+        p.handle_key(&ch('g'));
+        p.handle_key(&ch('1'));
+        p.handle_key(&ch('0'));
+        p.handle_key(&ch('g'));
+        assert_eq!(p.offset(), 9);
+        p.handle_key(&ch('n'));
+        assert_eq!(p.offset(), 20);
+        p.handle_key(&ch('3'));
+        p.handle_key(&ch('0'));
+        p.handle_key(&ch('g'));
+        p.handle_key(&ch('N'));
+        assert_eq!(p.offset(), 20);
+    }
+
+    #[test]
+    fn search_not_found_and_no_previous() {
+        let mut p = pager(20, 5);
+        assert_eq!(p.handle_key(&ch('n')), Outcome::Draw);
+        assert!(p.frame(80).status.contains("No previous search"));
+        type_search(&mut p, "zebra");
+        assert_eq!(p.offset(), 0);
+        assert!(p.frame(80).status.contains("Pattern not found: zebra"));
+        // Any key clears the message (redraw even if nothing moved).
+        assert_eq!(p.handle_key(&ch('k')), Outcome::Draw);
+        assert!(p.frame(80).status.contains("lines 1-5"));
+    }
+
+    #[test]
+    fn empty_pattern_repeats_previous_search() {
+        let mut p = numbered_with_matches(50, &[3, 20]);
+        type_search(&mut p, "needle");
+        p.handle_key(&ch('j'));
+        type_search(&mut p, "");
+        assert_eq!(p.offset(), 20);
+    }
+
+    #[test]
+    fn smart_case_search() {
+        let mut p = doc(&["a", "b", "x Foo", "y", "z foo", "q", "r", "s"], 2);
+        type_search(&mut p, "foo");
+        assert_eq!(p.offset(), 2);
+        let mut p = doc(&["a", "b", "x foo", "y", "z Foo", "q", "r", "s"], 2);
+        type_search(&mut p, "Foo");
+        assert_eq!(p.offset(), 4);
+    }
+
+    #[test]
+    fn matches_are_highlighted_in_frame() {
+        let mut p = doc(&["the cat sat", "dog"], 5);
+        type_search(&mut p, "cat");
+        let f = p.frame(80);
+        assert_eq!(f.rows[0], "the \x1b[7mcat\x1b[27m sat");
+        assert_eq!(f.rows[1], "dog");
+    }
+
+    #[test]
+    fn help_screen_any_key_returns() {
+        let mut p = pager(100, 10);
+        assert_eq!(p.handle_key(&ch('?')), Outcome::Draw);
+        let f = p.frame(80);
+        assert_eq!(f.rows[0], "markterm key bindings");
+        assert!(f.status.contains("HELP"));
+        // q leaves help without quitting or moving.
+        assert_eq!(p.handle_key(&ch('q')), Outcome::Draw);
+        assert_eq!(p.offset(), 0);
+        assert!(p.frame(80).status.contains("lines 1-10"));
+        p.handle_key(&ch('h'));
+        assert_eq!(p.handle_key(&ctrl('c')), Outcome::Quit(130));
+    }
+
+    #[test]
+    fn help_lists_every_binding() {
+        let help = HELP.join("\n");
+        for k in [
+            "Space", "PgDn", "Ctrl-F", "Ctrl-B", "Ctrl-D", "Ctrl-U", "Home", "End",
+        ] {
+            assert!(help.contains(k), "{k}");
+        }
+        for k in [
+            "/pattern", "n  N", "Ctrl-L", "Ctrl-Z", "Ctrl-C", "<n>%", "Esc",
+        ] {
+            assert!(help.contains(k), "{k}");
+        }
+    }
+
     #[test]
     fn frame_clips_rows_and_pads_with_tilde() {
         let lines = vec!["\x1b[1mabcdefghij\x1b[0m".to_string(), "short".to_string()];
@@ -532,5 +938,7 @@ mod tests {
         assert!(s.contains("README.md"), "{s}");
         let s = status_line("a.md", "lines 1-10 of 100 (10%)", 80);
         assert!(s.contains(HINT_FULL), "{s}");
+        let s = status_line("a.md", "lines 1-10 of 100 (10%)", 50);
+        assert!(s.contains("[?] help"), "{s}");
     }
 }

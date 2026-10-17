@@ -2,6 +2,7 @@
 //! navigation. The pure state lives in [`state`]; this module does the I/O.
 
 mod guard;
+mod search;
 mod state;
 mod text;
 
@@ -176,8 +177,16 @@ fn draw(out: &mut impl Write, frame: &Frame, clear_all: bool) -> io::Result<()> 
         Print(style::REVERSE),
         Print(&frame.status),
         Print(style::RESET),
-        EndSynchronizedUpdate,
     )?;
+    match frame.cursor {
+        Some(col) => queue!(
+            buf,
+            cursor::MoveTo(col, frame.rows.len() as u16),
+            cursor::Show
+        )?,
+        None => queue!(buf, cursor::Hide)?,
+    }
+    queue!(buf, EndSynchronizedUpdate)?;
     out.write_all(&buf)?;
     out.flush()
 }
@@ -200,6 +209,7 @@ mod tests {
         let frame = Frame {
             rows: vec!["\x1b[1mbold".to_string(), "plain".to_string()],
             status: " status ".to_string(),
+            cursor: None,
         };
         let mut out = Vec::new();
         draw(&mut out, &frame, false).unwrap();
