@@ -23,7 +23,6 @@ Check out Rust␛[2m (https://www.rust-lang.org/)␛[0m for more information.
 ␛[2m  │ ␛[0m        println!("{}", i);
 ␛[2m  │ ␛[0m    }
 ␛[2m  │ ␛[0m}
-␛[2m  │ ␛[0m
 ␛[2m  ╰───␛[0m
 
 Here's a plain code block:
@@ -31,7 +30,6 @@ Here's a plain code block:
 ␛[2m  ╭───␛[0m
 ␛[2m  │ ␛[0m$ cargo build --release
 ␛[2m  │ ␛[0m$ ./target/release/markterm README.md
-␛[2m  │ ␛[0m
 ␛[2m  ╰───␛[0m
 
 ␛[1m␛[96mLists␛[0m

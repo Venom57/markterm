@@ -23,7 +23,6 @@ Code Blocks
   |         println!("{}", i);
   |     }
   | }
-  | 
   ╰───
 
 Here's a plain code block:
@@ -31,7 +30,6 @@ Here's a plain code block:
   ╭───
   | $ cargo build --release
   | $ ./target/release/markterm README.md
-  | 
   ╰───
 
 Lists

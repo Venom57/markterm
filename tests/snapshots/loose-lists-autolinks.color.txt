@@ -10,7 +10,6 @@
 
 ␛[2m  ╭───␛[0m
 ␛[2m  │ ␛[0mcode
-␛[2m  │ ␛[0m
 ␛[2m  ╰───␛[0m
 
 x␛[2m (https://x.io)␛[0m https://auto.io␛[2m (https://auto.io)␛[0m

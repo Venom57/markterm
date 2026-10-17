@@ -19,7 +19,8 @@ struct RenderState {
     bold: bool,
     italic: bool,
     strikethrough: bool,
-    in_code_block: bool,
+    /// Buffered text of the fenced/indented code block being read.
+    code_block: Option<String>,
     in_heading: Option<u8>,
     link_url: Option<String>,
     table_row: Vec<String>,
@@ -58,7 +59,7 @@ impl RenderState {
             bold: false,
             italic: false,
             strikethrough: false,
-            in_code_block: false,
+            code_block: None,
             in_heading: None,
             link_url: None,
             table_row: Vec::new(),
@@ -431,21 +432,13 @@ fn handle_start_tag(state: &mut RenderState, tag: &Tag) {
             state.containers.push(Container::BlockQuote);
         }
         Tag::CodeBlock(kind) => {
-            state.in_code_block = true;
             state.push_blank();
-            if let CodeBlockKind::Fenced(lang) = kind {
-                if !lang.is_empty() {
-                    let label =
-                        style::styled(&format!("  ╭─ {} ", lang), &[style::DIM], state.use_color);
-                    state.emit(&label);
-                } else {
-                    let label = style::styled("  ╭───", &[style::DIM], state.use_color);
-                    state.emit(&label);
-                }
-            } else {
-                let label = style::styled("  ╭───", &[style::DIM], state.use_color);
-                state.emit(&label);
-            }
+            let label = match kind {
+                CodeBlockKind::Fenced(lang) if !lang.is_empty() => format!("  ╭─ {} ", lang),
+                _ => "  ╭───".to_string(),
+            };
+            state.emit(&style::styled(&label, &[style::DIM], state.use_color));
+            state.code_block = Some(String::new());
         }
         Tag::List(first) => {
             if state.directly_in_item() {
@@ -522,9 +515,8 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
             state.containers.pop();
         }
         TagEnd::CodeBlock => {
-            let label = style::styled("  ╰───", &[style::DIM], state.use_color);
-            state.emit(&label);
-            state.in_code_block = false;
+            let code = state.code_block.take().unwrap_or_default();
+            render_code_block(state, &code);
         }
         TagEnd::List(_) => {
             state.flush_wrapped();
@@ -575,15 +567,8 @@ fn handle_end_tag(state: &mut RenderState, tag: &TagEnd) {
 }
 
 fn handle_text(state: &mut RenderState, text: &str) {
-    if state.in_code_block {
-        for line in text.split('\n') {
-            let formatted = if state.use_color {
-                format!("{}  │ {}{}", style::DIM, style::RESET, line)
-            } else {
-                format!("  | {}", line)
-            };
-            state.emit(&formatted);
-        }
+    if let Some(code) = state.code_block.as_mut() {
+        code.push_str(text);
         return;
     }
 
@@ -614,9 +599,52 @@ fn handle_code(state: &mut RenderState, code: &str) {
 }
 
 fn handle_soft_break(state: &mut RenderState) {
-    if !state.in_code_block {
-        state.current_line.push(' ');
+    state.current_line.push(' ');
+}
+
+/// Expand tabs to 4-column tab stops.
+fn expand_tabs(line: &str) -> String {
+    const TAB: usize = 4;
+    let mut out = String::with_capacity(line.len());
+    let mut col = 0;
+    for ch in line.chars() {
+        if ch == '\t' {
+            let n = TAB - col % TAB;
+            out.extend(std::iter::repeat_n(' ', n));
+            col += n;
+        } else {
+            out.push(ch);
+            col += 1;
+        }
     }
+    out
+}
+
+/// Emit a buffered code block: one row per source line, tabs expanded,
+/// over-wide lines truncated with `…` (code is never word-wrapped).
+fn render_code_block(state: &mut RenderState, code: &str) {
+    let border = if state.use_color {
+        format!("{}  │ {}", style::DIM, style::RESET)
+    } else {
+        "  | ".to_string()
+    };
+    let available = state
+        .width
+        .saturating_sub(state.prefix_width())
+        .saturating_sub(4);
+    for line in code.lines() {
+        let line = expand_tabs(line);
+        let line = if available > 0 && line.chars().count() > available {
+            let mut cut: String = line.chars().take(available - 1).collect();
+            cut.push('…');
+            cut
+        } else {
+            line
+        };
+        state.emit(&format!("{}{}", border, line));
+    }
+    let label = style::styled("  ╰───", &[style::DIM], state.use_color);
+    state.emit(&label);
 }
 
 fn handle_hard_break(state: &mut RenderState) {
@@ -1017,6 +1045,42 @@ mod tests {
             plain("- aaaa bbbb cccc dddd", 15),
             vec!["  • aaaa bbbb", "    cccc dddd"]
         );
+    }
+
+    #[test]
+    fn test_code_block_no_trailing_or_doubled_blank_rows() {
+        assert_eq!(
+            plain("```\na\nb\n```", 80),
+            vec!["  ╭───", "  | a", "  | b", "  ╰───"]
+        );
+        // Inside a list item (one Text event per line).
+        assert_eq!(
+            plain("- x\n\n      a\n      b", 80),
+            vec![
+                "  • x",
+                "",
+                "      ╭───",
+                "      | a",
+                "      | b",
+                "      ╰───"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_code_block_in_quote_keeps_border() {
+        assert_eq!(
+            plain("> ```\n> a\n> ```", 80),
+            vec!["  |   ╭───", "  |   | a", "  |   ╰───"]
+        );
+    }
+
+    #[test]
+    fn test_code_block_expands_tabs_and_truncates() {
+        assert_eq!(plain("```\n\tx\ty\n```", 80)[1], "  |     x   y");
+        let lines = plain("```\n0123456789abcdef\n```", 16);
+        assert_eq!(lines[1], "  | 012345678…");
+        assert!(lines.iter().all(|l| style::visible_len(l) <= 14));
     }
 
     #[test]

@@ -1,8 +1,7 @@
   ␛[36m• ␛[0mitem
 
     ␛[2m  ╭───␛[0m
-    ␛[2m  │ ␛[0mcode in list with a really long line that goes past the terminal width for sure yes
-    ␛[2m  │ ␛[0m
+    ␛[2m  │ ␛[0mcode in list with a really lo…
     ␛[2m  ╰───␛[0m
 
   ␛[36m8. ␛[0meight

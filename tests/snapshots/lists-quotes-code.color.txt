@@ -1,8 +1,7 @@
 ␛[2m  ╭─ rust ␛[0m
 ␛[2m  │ ␛[0mfn main() {
-␛[2m  │ ␛[0m␉let x = 1;
+␛[2m  │ ␛[0m    let x = 1;
 ␛[2m  │ ␛[0m}
-␛[2m  │ ␛[0m
 ␛[2m  ╰───␛[0m
 
   ␛[36m• ␛[0mtight parent

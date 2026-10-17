@@ -10,7 +10,6 @@
 
   ╭───
   | code
-  | 
   ╰───
 
 x (https://x.io) https://auto.io (https://auto.io)
